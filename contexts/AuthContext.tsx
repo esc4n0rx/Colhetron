@@ -8,11 +8,21 @@ interface User {
   name: string
   email: string
   role: string
+  created_at: string
+  updated_at: string
+}
+
+interface RegisterData {
+  email: string
+  password: string
+  name: string
+  role?: string
 }
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<boolean>
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>
   logout: () => void
   isLoading: boolean
 }
@@ -24,36 +34,100 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // Simular verificação de autenticação
-    const savedUser = localStorage.getItem("user")
-    if (savedUser) {
-      setUser(JSON.parse(savedUser))
-    }
-    setIsLoading(false)
+    checkAuthStatus()
   }, [])
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // Simulação de login
-    if (email === "admin@sistema.com" && password === "123456") {
-      const userData = {
-        id: "1",
-        name: "Administrador",
-        email: "admin@sistema.com",
-        role: "admin",
+  const checkAuthStatus = async () => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      
+      if (!token) {
+        setIsLoading(false)
+        return
       }
-      setUser(userData)
-      localStorage.setItem("user", JSON.stringify(userData))
-      return true
+
+      const response = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token })
+      })
+
+      if (response.ok) {
+        const { user } = await response.json()
+        setUser(user)
+      } else {
+        localStorage.removeItem('colhetron_token')
+      }
+    } catch (error) {
+      console.error('Erro ao verificar autenticação:', error)
+      localStorage.removeItem('colhetron_token')
+    } finally {
+      setIsLoading(false)
     }
-    return false
+  }
+
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setUser(data.user)
+        localStorage.setItem('colhetron_token', data.token)
+        return { success: true }
+      } else {
+        return { success: false, error: data.error || 'Erro no login' }
+      }
+    } catch (error) {
+      console.error('Erro no login:', error)
+      return { success: false, error: 'Erro de conexão' }
+    }
+  }
+
+  const register = async (data: RegisterData): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setUser(result.user)
+        localStorage.setItem('colhetron_token', result.token)
+        return { success: true }
+      } else {
+        return { success: false, error: result.error || 'Erro no registro' }
+      }
+    } catch (error) {
+      console.error('Erro no registro:', error)
+      return { success: false, error: 'Erro de conexão' }
+    }
   }
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem("user")
+    localStorage.removeItem('colhetron_token')
   }
 
-  return <AuthContext.Provider value={{ user, login, logout, isLoading }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {
