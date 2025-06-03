@@ -1,48 +1,37 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useState, useEffect } from "react"
+import { useSeparations } from "@/hooks/useSeparations"
 
 interface Separation {
   id: string
   type: "SP" | "ES" | "RJ"
   date: string
-  user: string
-  status: "active" | "completed"
-  startTime: string
+  status: string
+  file_name: string
+  total_items: number
+  total_stores: number
+  created_at: string
 }
 
 interface SeparationContextType {
   currentSeparation: Separation | null
-  createSeparation: (data: Omit<Separation, "id" | "startTime">) => void
-  completeSeparation: () => void
+  isLoading: boolean
+  refreshSeparation: () => void
 }
 
 const SeparationContext = createContext<SeparationContextType | undefined>(undefined)
 
 export function SeparationProvider({ children }: { children: React.ReactNode }) {
-  const [currentSeparation, setCurrentSeparation] = useState<Separation | null>(null)
-
-  const createSeparation = (data: Omit<Separation, "id" | "startTime">) => {
-    const newSeparation: Separation = {
-      ...data,
-      id: Date.now().toString(),
-      startTime: new Date().toLocaleTimeString(),
-    }
-    setCurrentSeparation(newSeparation)
-  }
-
-  const completeSeparation = () => {
-    if (currentSeparation) {
-      setCurrentSeparation({
-        ...currentSeparation,
-        status: "completed",
-      })
-    }
-  }
+  const { currentSeparation, isLoading, refreshActiveSeparation } = useSeparations()
 
   return (
-    <SeparationContext.Provider value={{ currentSeparation, createSeparation, completeSeparation }}>
+    <SeparationContext.Provider value={{ 
+      currentSeparation, 
+      isLoading, 
+      refreshSeparation: refreshActiveSeparation 
+    }}>
       {children}
     </SeparationContext.Provider>
   )

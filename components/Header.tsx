@@ -30,6 +30,14 @@ export default function Header({ onNavigate }: HeaderProps) {
     { id: "perfil", label: "Perfil", icon: User },
   ]
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    })
+  }
+
   return (
     <header className="bg-gray-900/50 backdrop-blur-lg border-b border-gray-800">
       <div className="container mx-auto px-6 py-4">
@@ -47,9 +55,14 @@ export default function Header({ onNavigate }: HeaderProps) {
             <div>
               <h1 className="text-xl font-bold apple-font text-white">Sistema de Separação</h1>
               {currentSeparation && (
-                <p className="text-sm text-gray-400">
-                  {currentSeparation.type} - {currentSeparation.date}
-                </p>
+                <div className="flex items-center space-x-2">
+                  <p className="text-sm text-gray-400">
+                    {currentSeparation.type} - {formatDate(currentSeparation.date)}
+                  </p>
+                  <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full">
+                    {currentSeparation.total_items} itens
+                  </span>
+                </div>
               )}
             </div>
           </motion.div>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useSeparation } from "@/contexts/SeparationContext"
+import { useSeparations } from "@/hooks/useSeparations"
 import Header from "@/components/Header"
 import TabNavigation from "@/components/TabNavigation"
 import PedidosTab from "@/components/tabs/PedidosTab"
@@ -28,13 +29,13 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("pedidos")
   const [currentPage, setCurrentPage] = useState("dashboard")
   const [showNewSeparationModal, setShowNewSeparationModal] = useState(false)
-  const { currentSeparation } = useSeparation()
+  const { currentSeparation, isLoading } = useSeparation()
 
   useEffect(() => {
-    if (!currentSeparation) {
+    if (!isLoading && !currentSeparation) {
       setShowNewSeparationModal(true)
     }
-  }, [currentSeparation])
+  }, [currentSeparation, isLoading])
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -83,6 +84,18 @@ export default function Dashboard() {
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+          className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-950">
       <Header onNavigate={setCurrentPage} />
@@ -101,7 +114,10 @@ export default function Dashboard() {
         </AnimatePresence>
       </main>
 
-      <NewSeparationModal isOpen={showNewSeparationModal} onClose={() => setShowNewSeparationModal(false)} />
+      <NewSeparationModal 
+        isOpen={showNewSeparationModal} 
+        onClose={() => setShowNewSeparationModal(false)} 
+      />
     </div>
   )
 }
