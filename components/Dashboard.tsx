@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useSeparation } from "@/contexts/SeparationContext"
+import { useSeparation } from "@/contexts/SeparationContext" // Hook customizado
 import Header from "@/components/Header"
 import TabNavigation from "@/components/TabNavigation"
 import PedidosTab from "@/components/tabs/PedidosTab"
@@ -30,10 +30,9 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("pedidos")
   const [currentPage, setCurrentPage] = useState("dashboard")
   const [showNewSeparationModal, setShowNewSeparationModal] = useState(false)
-  const { currentSeparation, isLoading } = useSeparation()
-
+  const { currentSeparation, isLoading } = useSeparation() // Hook customizado
+  
   useEffect(() => {
-    // Só mostra o modal se não está carregando E não há separação ativa
     if (!isLoading && !currentSeparation) {
       setShowNewSeparationModal(true)
     } else {
@@ -42,6 +41,7 @@ export default function Dashboard() {
   }, [currentSeparation, isLoading])
 
   const renderTabContent = () => {
+    // ... (Lógica de renderização de abas)
     switch (activeTab) {
       case "pedidos":
         return <PedidosTab />
@@ -59,6 +59,7 @@ export default function Dashboard() {
   }
 
   const renderPage = () => {
+    // ... (Lógica de renderização de páginas)
     switch (currentPage) {
       case "configuracoes":
         return <ConfiguracoesPage onBack={() => setCurrentPage("dashboard")} />
@@ -119,6 +120,7 @@ export default function Dashboard() {
         </AnimatePresence>
       </main>
 
+      {/* Linha 122 onde o erro é apontado */}
       <NewSeparationModal 
         isOpen={showNewSeparationModal} 
         onClose={() => setShowNewSeparationModal(false)} 
