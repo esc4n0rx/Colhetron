@@ -1,181 +1,88 @@
+// components/tabs/PedidosTab.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { motion } from "framer-motion"
-import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Search, Filter } from "lucide-react"
+import { Search, Filter, Loader2, AlertCircle } from "lucide-react"
+import { usePedidosData } from "@/hooks/usePedidosData"
 
-const mockPedidos = [
-  {
-    id: 1,
-    tipoSepar: "SECO",
-    calibre: "",
-    codigo: "136210",
-    descricao: "TOMATE CEREJA RAMA KG",
-    ABR: 0,
-    A5: 0,
-    ABE: 0,
-    ADA: 0,
-    ATA: 0,
-    ATER: 0,
-    AVA: 0,
-    BAR: 0,
-    BLU: 0,
-    BOT: 0,
-    BZOS: 0,
-    C648: 0,
-  },
-  {
-    id: 2,
-    tipoSepar: "SECO",
-    calibre: "",
-    codigo: "165550",
-    descricao: "TOMATE/NHOS CONFEITE 250G",
-    ABR: 0,
-    A5: 0,
-    ABE: 0,
-    ADA: 0,
-    ATA: 0,
-    ATER: 0,
-    AVA: 0,
-    BAR: 0,
-    BLU: 0,
-    BOT: 0,
-    BZOS: 0,
-    C648: 0,
-  },
-  {
-    id: 3,
-    tipoSepar: "SECO",
-    calibre: "",
-    codigo: "155631",
-    descricao: "UVA MOSCATO BDJ 500G",
-    ABR: 0,
-    A5: 0,
-    ABE: 0,
-    ADA: 2,
-    ATA: 2,
-    ATER: 8,
-    AVA: 2,
-    BAR: 3,
-    BLU: 0,
-    BOT: 2,
-    BZOS: 0,
-    C648: 0,
-  },
-  {
-    id: 4,
-    tipoSepar: "SECO",
-    calibre: "",
-    codigo: "154439",
-    descricao: "UVA MOSCATO KG",
-    ABR: 0,
-    A5: 0,
-    ABE: 0,
-    ADA: 0,
-    ATA: 0,
-    ATER: 0,
-    AVA: 2,
-    BAR: 2,
-    BLU: 0,
-    BOT: 0,
-    BZOS: 0,
-    C648: 0,
-  },
-  {
-    id: 5,
-    tipoSepar: "SECO",
-    calibre: "",
-    codigo: "152793",
-    descricao: "UVA PRETA SEM SEMENTE HNT 500G UN",
-    ABR: 0,
-    A5: 0,
-    ABE: 10,
-    ADA: 8,
-    ATA: 4,
-    ATER: 6,
-    AVA: 10,
-    BAR: 0,
-    BLU: 2,
-    BOT: 4,
-    BZOS: 2,
-    C648: 0,
-  },
-  {
-    id: 6,
-    tipoSepar: "SECO",
-    calibre: "",
-    codigo: "100346",
-    descricao: "UVA RED GLOBE KG",
-    ABR: 0,
-    A5: 0,
-    ABE: 0,
-    ADA: 1,
-    ATA: 0,
-    ATER: 0,
-    AVA: 0,
-    BAR: 1,
-    BLU: 0,
-    BOT: 0,
-    BZOS: 0,
-    C648: 0,
-  },
-  {
-    id: 7,
-    tipoSepar: "SECO",
-    calibre: "",
-    codigo: "100268",
-    descricao: "UVA ROSADA BANDEJA UN",
-    ABR: 1,
-    A5: 0,
-    ABE: 1,
-    ADA: 1,
-    ATA: 0,
-    ATER: 1,
-    AVA: 1,
-    BAR: 1,
-    BLU: 1,
-    BOT: 1,
-    BZOS: 0,
-    C648: 0,
-  },
-]
+interface EditableInputProps {
+  value: number
+  onSave: (value: number) => void
+  disabled?: boolean
+}
 
-const lojas = ["ABR", "A5", "ABE", "ADA", "ATA", "ATER", "AVA", "BAR", "BLU", "BOT", "BZOS", "C648"]
+function EditableInput({ value, onSave, disabled }: EditableInputProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [tempValue, setTempValue] = useState(value.toString())
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const numValue = parseInt(tempValue) || 0
+      onSave(numValue)
+      setIsEditing(false)
+    } else if (e.key === 'Escape') {
+      setTempValue(value.toString())
+      setIsEditing(false)
+    }
+  }
+
+  const handleBlur = () => {
+    setTempValue(value.toString())
+    setIsEditing(false)
+  }
+
+  if (isEditing) {
+    return (
+      <Input
+        value={tempValue}
+        onChange={(e) => setTempValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        className="w-16 h-6 text-center text-xs bg-gray-800 border-blue-500 text-white"
+        autoFocus
+        disabled={disabled}
+      />
+    )
+  }
+
+  return (
+    <div
+      onClick={() => !disabled && setIsEditing(true)}
+      className={`w-16 h-6 flex items-center justify-center cursor-pointer hover:bg-gray-700 rounded text-xs ${
+        value > 0 ? "text-green-400 font-semibold" : "text-gray-500"
+      } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+    >
+      {value || ""}
+    </div>
+  )
+}
 
 export default function PedidosTab() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filtroTipo, setFiltroTipo] = useState("Todos")
-  const [filteredPedidos, setFilteredPedidos] = useState(mockPedidos)
+  const { pedidos, lojas, isLoading, error, updateQuantity } = usePedidosData()
 
-  const handleSearch = (term: string) => {
-    setSearchTerm(term)
-    applyFilters(term, filtroTipo)
-  }
+  const filteredPedidos = pedidos.filter(pedido => {
+    const matchesSearch = searchTerm === "" || 
+      pedido.descricao.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      pedido.codigo.includes(searchTerm)
+    
+    const matchesType = filtroTipo === "Todos" || pedido.tipoSepar === filtroTipo
+    
+    return matchesSearch && matchesType
+  })
 
-  const handleTipoFilter = (tipo: string) => {
-    setFiltroTipo(tipo)
-    applyFilters(searchTerm, tipo)
-  }
-
-  const applyFilters = (search: string, tipo: string) => {
-    let filtered = mockPedidos
-
-    if (search) {
-      filtered = filtered.filter(
-        (pedido) => pedido.descricao.toLowerCase().includes(search.toLowerCase()) || pedido.codigo.includes(search),
-      )
+  const handleQuantityUpdate = useCallback(async (itemId: string, storeCode: string, quantity: number) => {
+    const result = await updateQuantity(itemId, storeCode, quantity)
+    if (!result.success && result.error) {
+      console.error('Erro ao atualizar:', result.error)
+      // Aqui você pode adicionar um toast de erro se quiser
     }
-
-    if (tipo !== "Todos") {
-      filtered = filtered.filter((pedido) => pedido.tipoSepar === tipo)
-    }
-
-    setFilteredPedidos(filtered)
-  }
+  }, [updateQuantity])
 
   const today = new Date().toLocaleDateString("pt-BR", {
     weekday: "long",
@@ -183,6 +90,25 @@ export default function PedidosTab() {
     month: "long",
     day: "numeric",
   })
+
+  if (error) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="space-y-4"
+      >
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-white mb-2">Erro ao carregar dados</h3>
+            <p className="text-gray-400">{error}</p>
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div
@@ -204,12 +130,12 @@ export default function PedidosTab() {
             <Input
               placeholder="Buscar por código ou descrição..."
               value={searchTerm}
-              onChange={(e) => handleSearch(e.target.value)}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 bg-gray-800/50 border-gray-700 text-white placeholder-gray-400 h-10"
             />
           </div>
 
-          <Select value={filtroTipo} onValueChange={handleTipoFilter}>
+          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
             <SelectTrigger className="w-32 bg-gray-800/50 border-gray-700 text-white h-10">
               <Filter className="w-4 h-4 mr-2" />
               <SelectValue />
@@ -224,9 +150,17 @@ export default function PedidosTab() {
         </div>
       </div>
 
+      {/* Loading */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+          <span className="ml-3 text-gray-400">Carregando pedidos...</span>
+        </div>
+      )}
+
       {/* Tabela */}
-      <Card className="bg-gray-900/50 border-gray-800">
-        <CardContent className="p-0">
+      {!isLoading && (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -246,7 +180,7 @@ export default function PedidosTab() {
                   {lojas.map((loja) => (
                     <TableHead
                       key={loja}
-                      className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 w-12"
+                      className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 w-16"
                     >
                       {loja}
                     </TableHead>
@@ -257,20 +191,23 @@ export default function PedidosTab() {
                 {filteredPedidos.map((pedido, index) => (
                   <TableRow key={pedido.id} className="border-gray-700 hover:bg-gray-800/30 transition-colors">
                     <TableCell className="text-white text-xs border-r border-gray-700 font-medium">
-                      {pedido.tipoSepar}
+                      {pedido.tipoSepar || "-"}
                     </TableCell>
-                    <TableCell className="text-gray-300 text-xs border-r border-gray-700">{pedido.calibre}</TableCell>
+                    <TableCell className="text-gray-300 text-xs border-r border-gray-700">
+                      {pedido.calibre || "-"}
+                    </TableCell>
                     <TableCell className="text-blue-400 text-xs border-r border-gray-700 font-mono">
                       {pedido.codigo}
                     </TableCell>
-                    <TableCell className="text-white text-xs border-r border-gray-700">{pedido.descricao}</TableCell>
+                    <TableCell className="text-white text-xs border-r border-gray-700">
+                      {pedido.descricao}
+                    </TableCell>
                     {lojas.map((loja) => (
-                      <TableCell key={loja} className="text-center text-xs border-r border-gray-700">
-                        <span
-                          className={`${pedido[loja as keyof typeof pedido] > 0 ? "text-green-400 font-semibold" : "text-gray-500"}`}
-                        >
-                          {pedido[loja as keyof typeof pedido] || ""}
-                        </span>
+                      <TableCell key={loja} className="text-center border-r border-gray-700 p-1">
+                        <EditableInput
+                          value={pedido[loja] as number || 0}
+                          onSave={(value) => handleQuantityUpdate(pedido.id, loja, value)}
+                        />
                       </TableCell>
                     ))}
                   </TableRow>
@@ -278,10 +215,10 @@ export default function PedidosTab() {
               </TableBody>
             </Table>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
 
-      {filteredPedidos.length === 0 && (
+      {!isLoading && filteredPedidos.length === 0 && !error && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
           <p className="text-gray-400 text-lg">Nenhum pedido encontrado</p>
         </motion.div>

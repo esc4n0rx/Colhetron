@@ -1,9 +1,9 @@
+// components/Dashboard.tsx
 "use client"
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useSeparation } from "@/contexts/SeparationContext"
-import { useSeparations } from "@/hooks/useSeparations"
 import Header from "@/components/Header"
 import TabNavigation from "@/components/TabNavigation"
 import PedidosTab from "@/components/tabs/PedidosTab"
@@ -32,8 +32,11 @@ export default function Dashboard() {
   const { currentSeparation, isLoading } = useSeparation()
 
   useEffect(() => {
+    // Só mostra o modal se não está carregando E não há separação ativa
     if (!isLoading && !currentSeparation) {
       setShowNewSeparationModal(true)
+    } else {
+      setShowNewSeparationModal(false)
     }
   }, [currentSeparation, isLoading])
 
