@@ -1,3 +1,4 @@
+// app/dashboard/page.tsx (atualização)
 "use client"
 
 import { useState, useEffect } from "react"
@@ -12,6 +13,7 @@ import PreSeparacaoTab from "@/components/tabs/PreSeparacaoTab"
 import SeparacaoTab from "@/components/tabs/SeparacaoTab"
 import MediaSistemaTab from "@/components/tabs/MediaSistemaTab"
 import FaturamentoTab from "@/components/tabs/FaturamentoTab"
+import CadastroTab from "@/components/tabs/CadastroTab" // Nova importação
 import NewSeparationModal from "@/components/NewSeparationModal"
 import ConfiguracoesPage from "@/components/pages/ConfiguracoesPage"
 import SobrePage from "@/components/pages/SobrePage"
@@ -24,6 +26,7 @@ const tabs = [
   { id: "separacao", label: "SEPARAÇÃO" },
   { id: "media", label: "MÉDIA DO SISTEMA" },
   { id: "faturamento", label: "FATURAMENTO" },
+  { id: "cadastro", label: "CADASTRO" }, // Nova aba
 ]
 
 export default function DashboardPage() {
@@ -81,6 +84,8 @@ export default function DashboardPage() {
         return <MediaSistemaTab />
       case "faturamento":
         return <FaturamentoTab />
+      case "cadastro":
+        return <CadastroTab /> // Novo caso
       default:
         return <PedidosTab />
     }
