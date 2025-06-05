@@ -1,9 +1,10 @@
-// components/Dashboard.tsx
 "use client"
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { useSeparation } from "@/contexts/SeparationContext" // Hook customizado
+import { useAuth } from "@/contexts/AuthContext"
+import { useSeparation } from "@/contexts/SeparationContext"
+import { useRouter } from "next/navigation"
 import Header from "@/components/Header"
 import TabNavigation from "@/components/TabNavigation"
 import PedidosTab from "@/components/tabs/PedidosTab"
@@ -25,23 +26,50 @@ const tabs = [
   { id: "faturamento", label: "FATURAMENTO" },
 ]
 
-export default function Dashboard() {
-  // ✅ Todos os hooks no topo do componente
+export default function DashboardPage() {
+  const { user, isLoading: authLoading } = useAuth()
+  const { currentSeparation, isLoading: separationLoading } = useSeparation()
+  const router = useRouter()
+  
   const [activeTab, setActiveTab] = useState("pedidos")
   const [currentPage, setCurrentPage] = useState("dashboard")
   const [showNewSeparationModal, setShowNewSeparationModal] = useState(false)
-  const { currentSeparation, isLoading } = useSeparation() // Hook customizado
-  
+
+  // Proteção de rota
   useEffect(() => {
-    if (!isLoading && !currentSeparation) {
+    if (!authLoading && !user) {
+      router.push('/')
+    }
+  }, [user, authLoading, router])
+
+  // Controle do modal de nova separação
+  useEffect(() => {
+    if (!separationLoading && !currentSeparation && user) {
       setShowNewSeparationModal(true)
     } else {
       setShowNewSeparationModal(false)
     }
-  }, [currentSeparation, isLoading])
+  }, [currentSeparation, separationLoading, user])
+
+  // Loading de autenticação
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+          className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
+        />
+      </div>
+    )
+  }
+
+  // Se não estiver autenticado, não renderizar nada (redirecionamento em andamento)
+  if (!user) {
+    return null
+  }
 
   const renderTabContent = () => {
-    // ... (Lógica de renderização de abas)
     switch (activeTab) {
       case "pedidos":
         return <PedidosTab />
@@ -59,7 +87,6 @@ export default function Dashboard() {
   }
 
   const renderPage = () => {
-    // ... (Lógica de renderização de páginas)
     switch (currentPage) {
       case "configuracoes":
         return <ConfiguracoesPage onBack={() => setCurrentPage("dashboard")} />
@@ -89,42 +116,43 @@ export default function Dashboard() {
     }
   }
 
-  // ✅ Early return DEPOIS de todos os hooks
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
-          className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
-        />
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-gray-950">
-      <Header onNavigate={setCurrentPage} />
-
-      <main className="container mx-auto px-6 py-8">
-        <AnimatePresence mode="wait">
+      {/* Loading overlay para separação */}
+      {separationLoading && (
+        <div className="fixed inset-0 bg-gray-950 flex items-center justify-center z-50">
           <motion.div
-            key={currentPage}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4 }}
-          >
-            {renderPage()}
-          </motion.div>
-        </AnimatePresence>
-      </main>
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+            className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
+          />
+          <span className="ml-3 text-white">Carregando dados...</span>
+        </div>
+      )}
 
-      {/* Linha 122 onde o erro é apontado */}
-      <NewSeparationModal 
-        isOpen={showNewSeparationModal} 
-        onClose={() => setShowNewSeparationModal(false)} 
-      />
+      {/* Conteúdo principal */}
+      <div className={separationLoading ? "opacity-0 pointer-events-none" : "opacity-100"}>
+        <Header onNavigate={setCurrentPage} />
+
+        <main className="container mx-auto px-6 py-8">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentPage}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.4 }}
+            >
+              {renderPage()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+
+        <NewSeparationModal 
+          isOpen={showNewSeparationModal} 
+          onClose={() => setShowNewSeparationModal(false)} 
+        />
+      </div>
     </div>
   )
 }

@@ -1,9 +1,11 @@
+// components/Header.tsx
 "use client"
 
 import { useState } from "react"
 import { motion } from "framer-motion"
 import { useAuth } from "@/contexts/AuthContext"
 import { useSeparation } from "@/contexts/SeparationContext"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -21,6 +23,7 @@ interface HeaderProps {
 export default function Header({ onNavigate }: HeaderProps) {
   const { user, logout } = useAuth()
   const { currentSeparation } = useSeparation()
+  const router = useRouter()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   const menuItems = [
@@ -29,6 +32,11 @@ export default function Header({ onNavigate }: HeaderProps) {
     { id: "atualizacoes", label: "Atualizações", icon: Download },
     { id: "perfil", label: "Perfil", icon: User },
   ]
+
+  const handleLogout = () => {
+    logout()
+    router.push('/')
+  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', {
@@ -95,7 +103,7 @@ export default function Header({ onNavigate }: HeaderProps) {
                   Perfil
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-gray-700" />
-                <DropdownMenuItem onClick={logout} className="text-red-400 hover:text-red-300">
+                <DropdownMenuItem onClick={handleLogout} className="text-red-400 hover:text-red-300">
                   <LogOut className="w-4 h-4 mr-2" />
                   Sair
                 </DropdownMenuItem>
@@ -130,7 +138,7 @@ export default function Header({ onNavigate }: HeaderProps) {
                   <User className="w-4 h-4 mr-2" />
                   Perfil
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={logout} className="text-red-400 hover:text-red-300">
+                <DropdownMenuItem onClick={handleLogout} className="text-red-400 hover:text-red-300">
                   <LogOut className="w-4 h-4 mr-2" />
                   Sair
                 </DropdownMenuItem>
