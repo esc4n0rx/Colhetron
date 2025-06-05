@@ -26,6 +26,7 @@ const tabs = [
 ]
 
 export default function Dashboard() {
+  // ✅ Todos os hooks no topo do componente
   const [activeTab, setActiveTab] = useState("pedidos")
   const [currentPage, setCurrentPage] = useState("dashboard")
   const [showNewSeparationModal, setShowNewSeparationModal] = useState(false)
@@ -87,6 +88,7 @@ export default function Dashboard() {
     }
   }
 
+  // ✅ Early return DEPOIS de todos os hooks
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
