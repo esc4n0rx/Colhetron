@@ -1,4 +1,4 @@
-// app/dashboard/page.tsx (atualização)
+// app/dashboard/page.tsx (ATUALIZADO)
 "use client"
 
 import { useState, useEffect } from "react"
@@ -13,7 +13,7 @@ import PreSeparacaoTab from "@/components/tabs/PreSeparacaoTab"
 import SeparacaoTab from "@/components/tabs/SeparacaoTab"
 import MediaSistemaTab from "@/components/tabs/MediaSistemaTab"
 import FaturamentoTab from "@/components/tabs/FaturamentoTab"
-import CadastroTab from "@/components/tabs/CadastroTab" // Nova importação
+import CadastroTab from "@/components/tabs/CadastroTab"
 import NewSeparationModal from "@/components/NewSeparationModal"
 import ConfiguracoesPage from "@/components/pages/ConfiguracoesPage"
 import SobrePage from "@/components/pages/SobrePage"
@@ -26,17 +26,17 @@ const tabs = [
   { id: "separacao", label: "SEPARAÇÃO" },
   { id: "media", label: "MÉDIA DO SISTEMA" },
   { id: "faturamento", label: "FATURAMENTO" },
-  { id: "cadastro", label: "CADASTRO" }, // Nova aba
+  { id: "cadastro", label: "CADASTRO" },
 ]
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth()
-  const { currentSeparation, isLoading: separationLoading } = useSeparation()
+  const { isLoading: separationLoading } = useSeparation()
   const router = useRouter()
   
   const [activeTab, setActiveTab] = useState("pedidos")
   const [currentPage, setCurrentPage] = useState("dashboard")
-  const [showNewSeparationModal, setShowNewSeparationModal] = useState(false)
+  const [isNewSeparationModalOpen, setIsNewSeparationModalOpen] = useState(false)
 
   // Proteção de rota
   useEffect(() => {
@@ -44,15 +44,6 @@ export default function DashboardPage() {
       router.push('/')
     }
   }, [user, authLoading, router])
-
-  // Controle do modal de nova separação
-  useEffect(() => {
-    if (!separationLoading && !currentSeparation && user) {
-      setShowNewSeparationModal(true)
-    } else {
-      setShowNewSeparationModal(false)
-    }
-  }, [currentSeparation, separationLoading, user])
 
   // Loading de autenticação
   if (authLoading) {
@@ -85,7 +76,7 @@ export default function DashboardPage() {
       case "faturamento":
         return <FaturamentoTab />
       case "cadastro":
-        return <CadastroTab /> // Novo caso
+        return <CadastroTab />
       default:
         return <PedidosTab />
     }
@@ -137,7 +128,10 @@ export default function DashboardPage() {
 
       {/* Conteúdo principal */}
       <div className={separationLoading ? "opacity-0 pointer-events-none" : "opacity-100"}>
-        <Header onNavigate={setCurrentPage} />
+        <Header 
+          onNavigate={setCurrentPage} 
+          onNewSeparationClick={() => setIsNewSeparationModalOpen(true)}
+        />
 
         <main className="container mx-auto px-6 py-8">
           <AnimatePresence mode="wait">
@@ -154,8 +148,8 @@ export default function DashboardPage() {
         </main>
 
         <NewSeparationModal 
-          isOpen={showNewSeparationModal} 
-          onClose={() => setShowNewSeparationModal(false)} 
+          isOpen={isNewSeparationModalOpen} 
+          onClose={() => setIsNewSeparationModalOpen(false)} 
         />
       </div>
     </div>

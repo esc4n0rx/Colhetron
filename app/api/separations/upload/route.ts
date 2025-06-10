@@ -1,3 +1,4 @@
+// app/api/separations/upload/route.ts (ATUALIZADO)
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -213,6 +214,21 @@ async function createSeparation(params: {
   const { userId, type, date, fileName, processedData } = params
 
   try {
+    // Busca o cadastro de materiais do usuário para fazer o mapeamento
+    const { data: userMaterials, error: materialsError } = await supabaseAdmin
+      .from('colhetron_materiais')
+      .select('material, diurno')
+      .eq('user_id', userId);
+
+    if (materialsError) {
+      throw new Error(`Erro ao buscar cadastro de materiais: ${materialsError.message}`);
+    }
+
+    const materialTypeMap = new Map<string, string>();
+    userMaterials.forEach(m => {
+      materialTypeMap.set(m.material, m.diurno);
+    });
+
     // Criar separação principal
     const { data: separation, error: separationError } = await supabaseAdmin
       .from('colhetron_separations')
@@ -243,7 +259,8 @@ async function createSeparation(params: {
         separation_id: separation.id,
         material_code: material.code,
         description: material.description,
-        row_number: material.rowNumber
+        row_number: material.rowNumber,
+        type_separation: materialTypeMap.get(material.code) || 'SECO' // Default 'SECO' se não encontrado
       }))
       materialBatches.push(batch)
     }

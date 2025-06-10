@@ -1,4 +1,4 @@
-// components/Header.tsx
+// components/Header.tsx (ATUALIZADO)
 "use client"
 
 import { useState } from "react"
@@ -14,13 +14,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Settings, Info, Download, User, LogOut, Menu, Package } from "lucide-react"
+import { Settings, Info, Download, User, LogOut, Menu, Package, PlusCircle } from "lucide-react"
 
 interface HeaderProps {
   onNavigate: (page: string) => void
+  onNewSeparationClick: () => void
 }
 
-export default function Header({ onNavigate }: HeaderProps) {
+export default function Header({ onNavigate, onNewSeparationClick }: HeaderProps) {
   const { user, logout } = useAuth()
   const { currentSeparation } = useSeparation()
   const router = useRouter()
@@ -30,7 +31,6 @@ export default function Header({ onNavigate }: HeaderProps) {
     { id: "configuracoes", label: "Configurações", icon: Settings },
     { id: "sobre", label: "Sobre", icon: Info },
     { id: "atualizacoes", label: "Atualizações", icon: Download },
-    { id: "perfil", label: "Perfil", icon: User },
   ]
 
   const handleLogout = () => {
@@ -39,7 +39,10 @@ export default function Header({ onNavigate }: HeaderProps) {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
+    const date = new Date(dateString)
+    // Adiciona o timezone para evitar problemas de data
+    const userTimezoneOffset = date.getTimezoneOffset() * 60000
+    return new Date(date.getTime() + userTimezoneOffset).toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
@@ -76,7 +79,18 @@ export default function Header({ onNavigate }: HeaderProps) {
           </motion.div>
 
           {/* Menu Desktop */}
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden md:flex items-center space-x-2">
+             <Button
+                onClick={onNewSeparationClick}
+                disabled={!!currentSeparation}
+                size="sm"
+                className="bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-600 disabled:opacity-50"
+                aria-label="Criar nova separação"
+              >
+                <PlusCircle className="w-4 h-4 mr-2" />
+                Nova Separação
+              </Button>
+
             {menuItems.map((item) => (
               <Button
                 key={item.id}
@@ -103,7 +117,7 @@ export default function Header({ onNavigate }: HeaderProps) {
                   Perfil
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-gray-700" />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-400 hover:text-red-300">
+                <DropdownMenuItem onClick={handleLogout} className="text-red-400 hover:text-red-300 focus:bg-red-900/50 focus:text-white">
                   <LogOut className="w-4 h-4 mr-2" />
                   Sair
                 </DropdownMenuItem>
@@ -115,11 +129,23 @@ export default function Header({ onNavigate }: HeaderProps) {
           <div className="md:hidden">
             <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm">
+                <Button variant="ghost" size="icon">
                   <Menu className="w-5 h-5" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-gray-800 border-gray-700 w-48">
+              <DropdownMenuContent align="end" className="bg-gray-800 border-gray-700 w-56">
+                <DropdownMenuItem
+                    onClick={() => {
+                      onNewSeparationClick();
+                      setIsMenuOpen(false);
+                    }}
+                    disabled={!!currentSeparation}
+                    className="text-gray-300 hover:text-white focus:bg-blue-900/50 disabled:opacity-50"
+                  >
+                    <PlusCircle className="w-4 h-4 mr-2" />
+                    Nova Separação
+                  </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-gray-700" />
                 {menuItems.map((item) => (
                   <DropdownMenuItem
                     key={item.id}
@@ -134,11 +160,11 @@ export default function Header({ onNavigate }: HeaderProps) {
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator className="bg-gray-700" />
-                <DropdownMenuItem onClick={() => onNavigate("perfil")} className="text-gray-300 hover:text-white">
+                 <DropdownMenuItem onClick={() => {onNavigate("perfil"); setIsMenuOpen(false);}} className="text-gray-300 hover:text-white">
                   <User className="w-4 h-4 mr-2" />
                   Perfil
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleLogout} className="text-red-400 hover:text-red-300">
+                <DropdownMenuItem onClick={handleLogout} className="text-red-400 hover:text-red-300 focus:bg-red-900/50 focus:text-white">
                   <LogOut className="w-4 h-4 mr-2" />
                   Sair
                 </DropdownMenuItem>

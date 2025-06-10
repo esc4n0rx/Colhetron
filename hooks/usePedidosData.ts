@@ -1,5 +1,5 @@
-// hooks/usePedidosData.ts
-import { useState, useEffect } from 'react'
+// hooks/usePedidosData.ts (ATUALIZADO)
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface PedidoItem {
@@ -18,16 +18,17 @@ export function usePedidosData() {
   const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!user) return
 
+    setIsLoading(true)
+    setError(null)
+    
     try {
-      setIsLoading(true)
-      setError(null)
-
       const token = localStorage.getItem('colhetron_token')
       if (!token) {
         setError('Token não encontrado')
+        setIsLoading(false)
         return
       }
 
@@ -46,13 +47,13 @@ export function usePedidosData() {
       setPedidos(data)
       setLojas(stores)
 
-    } catch (error) {
-      console.error('Erro ao carregar pedidos:', error)
-      setError(error instanceof Error ? error.message : 'Erro desconhecido')
+    } catch (err) {
+      console.error('Erro ao carregar pedidos:', err)
+      setError(err instanceof Error ? err.message : 'Erro desconhecido')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user])
 
   const updateQuantity = async (itemId: string, storeCode: string, quantity: number) => {
     try {
@@ -61,10 +62,7 @@ export function usePedidosData() {
 
       const response = await fetch('/api/separations/update-quantity', {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ itemId, storeCode, quantity })
       })
 
@@ -73,27 +71,47 @@ export function usePedidosData() {
         throw new Error(errorData.error || 'Erro ao atualizar quantidade')
       }
 
-      // Atualizar dados localmente
       setPedidos(prev => prev.map(pedido => 
-        pedido.id === itemId 
-          ? { ...pedido, [storeCode]: quantity }
-          : pedido
+        pedido.id === itemId ? { ...pedido, [storeCode]: quantity } : pedido
       ))
 
       return { success: true }
-
     } catch (error) {
       console.error('Erro ao atualizar quantidade:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido' 
+      return { success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' }
+    }
+  }
+
+  const updateItemType = async (itemId: string, typeSeparation: string) => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) throw new Error('Token não encontrado')
+
+      const response = await fetch('/api/separations/update-item-type', {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId, typeSeparation })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erro ao atualizar tipo de separação')
       }
+
+      setPedidos(prev => prev.map(pedido => 
+        pedido.id === itemId ? { ...pedido, tipoSepar: typeSeparation } : pedido
+      ))
+
+      return { success: true }
+    } catch (error) {
+      console.error('Erro ao atualizar tipo de separação:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' }
     }
   }
 
   useEffect(() => {
     fetchData()
-  }, [user])
+  }, [fetchData])
 
   return {
     pedidos,
@@ -101,6 +119,7 @@ export function usePedidosData() {
     isLoading,
     error,
     updateQuantity,
+    updateItemType,
     refetch: fetchData
   }
 }

@@ -1,4 +1,4 @@
-// app/api/separations/data/route.ts
+// app/api/separations/data/route.ts (ATUALIZADO)
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
         id,
         material_code,
         description,
+        type_separation,
         colhetron_separation_quantities (
           store_code,
           quantity
@@ -96,8 +97,8 @@ export async function GET(request: NextRequest) {
 
       return {
         id: item.id,
-        tipoSepar: "", // Campo indefinido conforme solicitado
-        calibre: "", // Campo vazio
+        tipoSepar: item.type_separation,
+        calibre: "",
         codigo: item.material_code,
         descricao: item.description,
         ...quantities

@@ -1,4 +1,4 @@
-// components/tabs/PedidosTab.tsx
+// components/tabs/PedidosTab.tsx (ATUALIZADO)
 "use client"
 
 import { useState, useCallback } from "react"
@@ -31,8 +31,9 @@ function EditableInput({ value, onSave, disabled }: EditableInputProps) {
   }
 
   const handleBlur = () => {
-    setTempValue(value.toString())
-    setIsEditing(false)
+    const numValue = parseInt(tempValue) || 0
+    onSave(numValue);
+    setIsEditing(false);
   }
 
   if (isEditing) {
@@ -61,10 +62,38 @@ function EditableInput({ value, onSave, disabled }: EditableInputProps) {
   )
 }
 
+interface EditableSelectProps {
+  value: string;
+  onSave: (value: string) => void;
+  disabled?: boolean;
+}
+
+function EditableSelect({ value, onSave, disabled }: EditableSelectProps) {
+  const handleSave = (newValue: string) => {
+    if (newValue) {
+      onSave(newValue);
+    }
+  };
+
+  return (
+    <Select value={value} onValueChange={handleSave} disabled={disabled}>
+      <SelectTrigger className="w-24 h-6 text-xs bg-gray-800/0 border-none text-white focus:ring-0 focus:ring-offset-0">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent className="bg-gray-800 border-gray-700">
+        <SelectItem value="SECO">SECO</SelectItem>
+        <SelectItem value="FRIO">FRIO</SelectItem>
+        <SelectItem value="ORGANICO">ORGÂNICO</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+
 export default function PedidosTab() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filtroTipo, setFiltroTipo] = useState("Todos")
-  const { pedidos, lojas, isLoading, error, updateQuantity } = usePedidosData()
+  const { pedidos, lojas, isLoading, error, updateQuantity, updateItemType } = usePedidosData()
 
   const filteredPedidos = pedidos.filter(pedido => {
     const matchesSearch = searchTerm === "" || 
@@ -79,10 +108,18 @@ export default function PedidosTab() {
   const handleQuantityUpdate = useCallback(async (itemId: string, storeCode: string, quantity: number) => {
     const result = await updateQuantity(itemId, storeCode, quantity)
     if (!result.success && result.error) {
-      console.error('Erro ao atualizar:', result.error)
+      console.error('Erro ao atualizar quantidade:', result.error)
       // Aqui você pode adicionar um toast de erro se quiser
     }
   }, [updateQuantity])
+
+  const handleItemTypeUpdate = useCallback(async (itemId: string, newType: string) => {
+    const result = await updateItemType(itemId, newType)
+    if (!result.success && result.error) {
+      console.error('Erro ao atualizar tipo de separação:', result.error)
+      // Aqui você pode adicionar um toast de erro se quiser
+    }
+  }, [updateItemType])
 
   const today = new Date().toLocaleDateString("pt-BR", {
     weekday: "long",
@@ -136,15 +173,15 @@ export default function PedidosTab() {
           </div>
 
           <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-            <SelectTrigger className="w-32 bg-gray-800/50 border-gray-700 text-white h-10">
+            <SelectTrigger className="w-40 bg-gray-800/50 border-gray-700 text-white h-10">
               <Filter className="w-4 h-4 mr-2" />
-              <SelectValue />
+              <SelectValue placeholder="Filtrar tipo" />
             </SelectTrigger>
             <SelectContent className="bg-gray-800 border-gray-700">
               <SelectItem value="Todos">Todos</SelectItem>
-              <SelectItem value="FRIO">FRIO</SelectItem>
               <SelectItem value="SECO">SECO</SelectItem>
-              <SelectItem value="ORGÂNICO">ORGÂNICO</SelectItem>
+              <SelectItem value="FRIO">FRIO</SelectItem>
+              <SelectItem value="ORGANICO">ORGÂNICO</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -165,7 +202,7 @@ export default function PedidosTab() {
             <Table>
               <TableHeader>
                 <TableRow className="border-gray-700 bg-gray-800/50">
-                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-20">
+                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-28">
                     TIPO DE SEPAR.
                   </TableHead>
                   <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-20">
@@ -188,10 +225,13 @@ export default function PedidosTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPedidos.map((pedido, index) => (
+                {filteredPedidos.map((pedido) => (
                   <TableRow key={pedido.id} className="border-gray-700 hover:bg-gray-800/30 transition-colors">
-                    <TableCell className="text-white text-xs border-r border-gray-700 font-medium">
-                      {pedido.tipoSepar || "-"}
+                    <TableCell className="text-white text-xs border-r border-gray-700 font-medium p-1">
+                       <EditableSelect
+                          value={pedido.tipoSepar}
+                          onSave={(value) => handleItemTypeUpdate(pedido.id, value)}
+                        />
                     </TableCell>
                     <TableCell className="text-gray-300 text-xs border-r border-gray-700">
                       {pedido.calibre || "-"}
@@ -221,6 +261,7 @@ export default function PedidosTab() {
       {!isLoading && filteredPedidos.length === 0 && !error && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
           <p className="text-gray-400 text-lg">Nenhum pedido encontrado</p>
+          <p className="text-gray-500 text-sm">Use o botão "Nova Separação" no cabeçalho para começar.</p>
         </motion.div>
       )}
     </motion.div>
