@@ -1,199 +1,320 @@
+// components/tabs/SeparacaoTab.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Filter } from "lucide-react"
-
-const mockSeparacao = [
-  {
-    id: 1,
-    material: "ABACATE KG",
-    BLU: 1,
-    V157: 1,
-    MBN312: 0,
-    REC: 2,
-    GAR: 2,
-    M1083: 0,
-    A5: 0,
-    C648: 1,
-    BLU2: 2,
-    FRE: 12,
-    ABE: 0,
-    REC2: 0,
-    ABE2: 1,
-    FLA: 2,
-    ABR: 0,
-    BAR: 3,
-  },
-  {
-    id: 2,
-    material: "ABACAXI UND",
-    BLU: 0,
-    V157: 0,
-    MBN312: 0,
-    REC: 0,
-    GAR: 0,
-    M1083: 0,
-    A5: 0,
-    C648: 0,
-    BLU2: 0,
-    FRE: 0,
-    ABE: 0,
-    REC2: 0,
-    ABE2: 0,
-    FLA: 0,
-    ABR: 0,
-    BAR: 0,
-  },
-  {
-    id: 3,
-    material: "ABOBORA JAPONESA KG",
-    BLU: 0,
-    V157: 0,
-    MBN312: 0,
-    REC: 0,
-    GAR: 0,
-    M1083: 0,
-    A5: 0,
-    C648: 0,
-    BLU2: 1,
-    FRE: 0,
-    ABE: 0,
-    REC2: 0,
-    ABE2: 1,
-    FLA: 0,
-    ABR: 0,
-    BAR: 2,
-  },
-  {
-    id: 4,
-    material: "ABOBORA MORANGA KG",
-    BLU: 0,
-    V157: 0,
-    MBN312: 0,
-    REC: 0,
-    GAR: 0,
-    M1083: 0,
-    A5: 0,
-    C648: 0,
-    BLU2: 0,
-    FRE: 0,
-    ABE: 0,
-    REC2: 0,
-    ABE2: 0,
-    FLA: 0,
-    ABR: 0,
-    BAR: 0,
-  },
-  {
-    id: 5,
-    material: "ABOBORA SECA KG",
-    BLU: 0,
-    V157: 0,
-    MBN312: 0,
-    REC: 0,
-    GAR: 0,
-    M1083: 0,
-    A5: 0,
-    C648: 0,
-    BLU2: 0,
-    FRE: 0,
-    ABE: 0,
-    REC2: 0,
-    ABE2: 0,
-    FLA: 0,
-    ABR: 0,
-    BAR: 0,
-  },
-  {
-    id: 6,
-    material: "ABOBRINHA ITALIANA KG",
-    BLU: 0,
-    V157: 0,
-    MBN312: 0,
-    REC: 0,
-    GAR: 0,
-    M1083: 0,
-    A5: 0,
-    C648: 1,
-    BLU2: 3,
-    FRE: 0,
-    ABE: 0,
-    REC2: 1,
-    ABE2: 2,
-    FLA: 0,
-    ABR: 0,
-    BAR: 4,
-  },
-  {
-    id: 7,
-    material: "ACAFRAO DA TERRA KG",
-    BLU: 0,
-    V157: 0,
-    MBN312: 0,
-    REC: 0,
-    GAR: 0,
-    M1083: 0,
-    A5: 0,
-    C648: 0,
-    BLU2: 0,
-    FRE: 0,
-    ABE: 0,
-    REC2: 0,
-    ABE2: 0,
-    FLA: 0,
-    ABR: 0,
-    BAR: 0,
-  },
-  {
-    id: 8,
-    material: "ALHO PORO UN",
-    BLU: 0,
-    V157: 0,
-    MBN312: 0,
-    REC: 0,
-    GAR: 0,
-    M1083: 0,
-    A5: 0,
-    C648: 0,
-    BLU2: 1,
-    FRE: 0,
-    ABE: 0,
-    REC2: 0,
-    ABE2: 1,
-    FLA: 0,
-    ABR: 0,
-    BAR: 1,
-  },
-]
-
-const lojas = [
-  "BLU",
-  "V157",
-  "MBN312",
-  "REC",
-  "GAR",
-  "M1083",
-  "A5",
-  "C648",
-  "BLU",
-  "FRE",
-  "ABE",
-  "REC",
-  "ABE",
-  "FLA",
-  "ABR",
-  "BAR",
-]
-const lojasNumeros = ["-1", "1", "-2", "2", "-3", "3", "-4", "4", "-5", "5", "-6", "6", "-7", "7", "-8", "8"]
+import { Loader2, AlertCircle, Filter, Printer } from "lucide-react"
+import { useSeparacaoData } from "@/hooks/useSeparacaoData"
 
 export default function SeparacaoTab() {
-  const [filtroTipo, setFiltroTipo] = useState("FRIO")
-  const [filtroZona, setFiltroZona] = useState("ZONA 1")
-  const [filtroSubzona, setFiltroSubzona] = useState("N/A")
+  const { data, lojas, isLoading, error, getOrderedStores } = useSeparacaoData()
+  const [filtroTipo, setFiltroTipo] = useState<"Todos" | "SECO" | "FRIO" | "ORGANICO">("Todos")
+  const [filtroZona, setFiltroZona] = useState<string>("Todas")
+  const [filtroSubzona, setFiltroSubzona] = useState<string>("Todas")
+
+  // Obter tipos disponíveis
+  const availableTypes = useMemo(() => {
+    const types = new Set(data.map(item => item.tipoSepar))
+    const sortedTypes = Array.from(types).sort((a, b) => {
+      if (a === 'SECO') return -1
+      if (b === 'SECO') return 1
+      if (a === 'FRIO') return -1
+      if (b === 'FRIO') return 1
+      return a.localeCompare(b)
+    })
+    return ['Todos', ...sortedTypes]
+  }, [data])
+
+  // Obter zonas disponíveis baseadas no tipo de separação
+  const availableZones = useMemo(() => {
+    if (filtroTipo === "Todos") return ["Todas"]
+    
+    const zones = new Set<string>()
+    lojas.forEach(loja => {
+      const zona = filtroTipo === 'FRIO' ? loja.zonaFrio : loja.zonaSeco
+      if (zona && zona.trim() !== '') {
+        zones.add(zona)
+      }
+    })
+    
+    return ['Todas', ...Array.from(zones).sort()]
+  }, [lojas, filtroTipo])
+
+  // Obter subzonas disponíveis baseadas na zona selecionada
+  const availableSubzones = useMemo(() => {
+    if (filtroTipo === "Todos" || filtroZona === "Todas" || filtroTipo === 'FRIO') {
+      return ["Todas"]
+    }
+    
+    const subzones = new Set<string>()
+    lojas.forEach(loja => {
+      if (loja.zonaSeco === filtroZona && loja.subzonaSeco && loja.subzonaSeco.trim() !== '') {
+        subzones.add(loja.subzonaSeco)
+      }
+    })
+    
+    return ['Todas', ...Array.from(subzones).sort()]
+  }, [lojas, filtroZona, filtroTipo])
+
+  // Filtrar dados
+  const filteredData = useMemo(() => {
+    if (filtroTipo === "Todos") return data
+    return data.filter(item => item.tipoSepar === filtroTipo)
+  }, [data, filtroTipo])
+
+  // Obter lojas ordenadas baseadas nos filtros
+  const orderedStores = useMemo(() => {
+    if (filtroTipo === "Todos") return []
+    
+    let stores = getOrderedStores(filtroTipo)
+    
+    // Filtrar por zona se selecionada
+    if (filtroZona !== "Todas") {
+      stores = stores.filter(loja => {
+        const zona = filtroTipo === 'FRIO' ? loja.zonaFrio : loja.zonaSeco
+        return zona === filtroZona
+      })
+    }
+    
+    // Filtrar por subzona se selecionada (apenas para SECO)
+    if (filtroSubzona !== "Todas" && filtroTipo === 'SECO') {
+      stores = stores.filter(loja => loja.subzonaSeco === filtroSubzona)
+    }
+    
+    return stores
+  }, [getOrderedStores, filtroTipo, filtroZona, filtroSubzona])
+
+  const totals = useMemo<{ [key: string]: number }>(() => {
+    const storeTotals: { [key: string]: number } = {}
+    let grandTotal = 0
+
+    orderedStores.forEach(store => {
+      storeTotals[store.prefixo] = 0
+    })
+
+    filteredData.forEach(item => {
+      orderedStores.forEach(store => {
+        const quantity = (item[store.prefixo] as number) || 0
+        storeTotals[store.prefixo] += quantity
+        grandTotal += quantity
+      })
+    })
+
+    storeTotals.total = grandTotal
+    return storeTotals
+  }, [filteredData, orderedStores])
+
+  const handlePrint = useCallback(() => {
+    if (filteredData.length === 0 || orderedStores.length === 0) return
+
+    const printStyles = `
+      <style>
+        @media print {
+          @page {
+            size: landscape;
+            margin: 1cm;
+          }
+          body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            color: #333;
+          }
+          .print-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 0.5rem;
+          }
+          .header-info {
+            text-align: left;
+          }
+          .header-info h1 {
+            font-size: 16pt;
+            margin: 0;
+            font-weight: bold;
+          }
+          .header-info p {
+            font-size: 11pt;
+            margin: 0;
+          }
+          .header-datetime {
+            text-align: right;
+            font-size: 9pt;
+          }
+          .filter-info {
+            background-color: #f5f5f5;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            font-size: 9pt;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+          }
+          th, td {
+            border: 1px solid #ddd;
+            padding: 4px;
+            text-align: left;
+          }
+          th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            font-size: 8pt;
+          }
+          td {
+            font-size: 8pt;
+          }
+          tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+          }
+          tfoot tr {
+            font-weight: bold;
+            background-color: #e8e8e8;
+          }
+          .text-center { text-align: center; }
+          .text-right { text-align: right; }
+          .store-header {
+            writing-mode: vertical-lr;
+            text-orientation: mixed;
+            min-width: 30px;
+            max-width: 30px;
+          }
+        }
+      </style>
+    `
+
+    const filterInfo = `
+      <div class="filter-info">
+        <strong>Filtros Aplicados:</strong> 
+        Tipo: ${filtroTipo} | 
+        Zona: ${filtroZona} | 
+        Subzona: ${filtroSubzona}
+      </div>
+    `
+
+    const tableHeader = `
+      <thead>
+        <tr>
+          <th rowspan="2" style="vertical-align: middle;">MATERIAL SEPARAÇÃO</th>
+          ${orderedStores.map(store => `
+            <th class="text-center store-header">${store.prefixo}</th>
+          `).join('')}
+        </tr>
+        <tr>
+          ${orderedStores.map(store => `
+            <th class="text-center" style="font-size: 7pt;">${store.nome.substring(0, 15)}</th>
+          `).join('')}
+        </tr>
+      </thead>
+    `
+
+    const tableBody = `
+      <tbody>
+        ${filteredData.map(item => `
+          <tr>
+            <td style="min-width: 200px;">${item.material}</td>
+            ${orderedStores.map(store => `
+              <td class="text-center">${(item[store.prefixo] as number) || 0}</td>
+            `).join('')}
+          </tr>
+        `).join('')}
+      </tbody>
+    `
+
+    const tableFooter = `
+    <tfoot>
+      <tr>
+        <td class="text-right"><strong>Total Geral</strong></td>
+        ${orderedStores.map(store => `
+          <td class="text-center"><strong>${(totals as any)[store.prefixo] || 0}</strong></td>
+        `).join('')}
+      </tr>
+    </tfoot>
+  `
+
+    const reportTitle = `SEPARAÇÃO ${filtroTipo !== 'Todos' ? `(${filtroTipo})` : ''}`
+    const now = new Date()
+    
+    const printContent = `
+      <html>
+        <head>
+          <title>${reportTitle}</title>
+          ${printStyles}
+        </head>
+        <body>
+          <div class="print-header">
+            <div class="header-info">
+              <h1>Sistema Colhetron</h1>
+              <p>${reportTitle}</p>
+            </div>
+            <div class="header-datetime">
+              ${now.toLocaleDateString('pt-BR')} <br/>
+              ${now.toLocaleTimeString('pt-BR')}
+            </div>
+          </div>
+          ${filterInfo}
+          <table>
+            ${tableHeader}
+            ${tableBody}
+            ${tableFooter}
+          </table>
+        </body>
+      </html>
+    `
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(printContent)
+      printWindow.document.close()
+      printWindow.focus()
+      printWindow.print()
+    }
+  }, [filteredData, orderedStores, totals, filtroTipo, filtroZona, filtroSubzona])
+
+  // Reset filtros quando tipo muda
+  const handleTipoChange = (tipo: typeof filtroTipo) => {
+    setFiltroTipo(tipo)
+    setFiltroZona("Todas")
+    setFiltroSubzona("Todas")
+  }
+
+  // Reset subzona quando zona muda
+  const handleZonaChange = (zona: string) => {
+    setFiltroZona(zona)
+    setFiltroSubzona("Todas")
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+        <span className="ml-3 text-gray-400">Carregando dados de separação...</span>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-center py-12"
+      >
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-white mb-2">Erro ao carregar dados</h3>
+          <p className="text-gray-400">{error}</p>
+        </div>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div
@@ -206,88 +327,99 @@ export default function SeparacaoTab() {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold apple-font text-white">Separação por Zona</h2>
-          <p className="text-gray-400">Quantidades segmentadas por zonas e subzonas</p>
+          <p className="text-gray-400">Quantidades organizadas por zona e ordem de separação</p>
         </div>
+        
+        <Button 
+          onClick={handlePrint} 
+          disabled={filteredData.length === 0 || orderedStores.length === 0}
+          variant="outline"
+          className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700 disabled:opacity-50"
+        >
+          <Printer className="w-4 h-4 mr-2" />
+          Imprimir
+        </Button>
       </div>
 
       {/* Filtros */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Filtro Tipo */}
         <Card className="bg-gray-900/50 border-gray-800 p-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-gray-400 text-sm font-medium">TIPO SEPARAÇÃO</span>
-              <div className="flex gap-1">
-                <Filter className="w-4 h-4 text-gray-400" />
-              </div>
+              <Filter className="w-4 h-4 text-gray-400" />
             </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={filtroTipo === "FRIO" ? "default" : "outline"}
-                onClick={() => setFiltroTipo("FRIO")}
-                className={`text-xs ${filtroTipo === "FRIO" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
-              >
-                FRIO
-              </Button>
-              <Button
-                size="sm"
-                variant={filtroTipo === "SECO" ? "default" : "outline"}
-                onClick={() => setFiltroTipo("SECO")}
-                className={`text-xs ${filtroTipo === "SECO" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
-              >
-                SECO
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              {availableTypes.map((tipo) => (
+                <Button
+                  key={tipo}
+                  size="sm"
+                  variant={filtroTipo === tipo ? "default" : "outline"}
+                  onClick={() => handleTipoChange(tipo as typeof filtroTipo)}
+                  className={`text-xs ${
+                    filtroTipo === tipo 
+                      ? "bg-blue-600 text-white" 
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  }`}
+                >
+                  {tipo}
+                </Button>
+              ))}
             </div>
           </div>
         </Card>
 
+        {/* Filtro Zona */}
         <Card className="bg-gray-900/50 border-gray-800 p-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-gray-400 text-sm font-medium">ZONA SEPARAÇÃO</span>
-              <div className="flex gap-1">
-                <Filter className="w-4 h-4 text-gray-400" />
-              </div>
+              <Filter className="w-4 h-4 text-gray-400" />
             </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={filtroZona === "ZONA 1" ? "default" : "outline"}
-                onClick={() => setFiltroZona("ZONA 1")}
-                className={`text-xs ${filtroZona === "ZONA 1" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
-              >
-                ZONA 1
-              </Button>
-              <Button
-                size="sm"
-                variant={filtroZona === "ZONA 2" ? "default" : "outline"}
-                onClick={() => setFiltroZona("ZONA 2")}
-                className={`text-xs ${filtroZona === "ZONA 2" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
-              >
-                ZONA 2
-              </Button>
+            <div className="flex flex-wrap gap-2">
+              {availableZones.map((zona) => (
+                <Button
+                  key={zona}
+                  size="sm"
+                  variant={filtroZona === zona ? "default" : "outline"}
+                  onClick={() => handleZonaChange(zona)}
+                  disabled={filtroTipo === "Todos"}
+                  className={`text-xs ${
+                    filtroZona === zona 
+                      ? "bg-blue-600 text-white" 
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  } disabled:opacity-50`}
+                >
+                  {zona}
+                </Button>
+              ))}
             </div>
           </div>
         </Card>
 
+        {/* Filtro Subzona */}
         <Card className="bg-gray-900/50 border-gray-800 p-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-gray-400 text-sm font-medium">SUBZONA SEPARAÇÃO</span>
-              <div className="flex gap-1">
-                <Filter className="w-4 h-4 text-gray-400" />
-              </div>
+              <Filter className="w-4 h-4 text-gray-400" />
             </div>
             <div className="flex flex-wrap gap-1">
-              {["N/A", "SUBZONA 1.1", "SUBZONA 1.2", "SUBZONA 1.3", "SUBZONA 2.1", "SUBZONA 2.2"].map((sub) => (
+              {availableSubzones.map((subzona) => (
                 <Button
-                  key={sub}
+                  key={subzona}
                   size="sm"
-                  variant={filtroSubzona === sub ? "default" : "outline"}
-                  onClick={() => setFiltroSubzona(sub)}
-                  className={`text-xs ${filtroSubzona === sub ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
+                  variant={filtroSubzona === subzona ? "default" : "outline"}
+                  onClick={() => setFiltroSubzona(subzona)}
+                  disabled={filtroTipo !== "SECO" || filtroZona === "Todas"}
+                  className={`text-xs ${
+                    filtroSubzona === subzona 
+                      ? "bg-blue-600 text-white" 
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  } disabled:opacity-50`}
                 >
-                  {sub}
+                  {subzona}
                 </Button>
               ))}
             </div>
@@ -305,48 +437,77 @@ export default function SeparacaoTab() {
                   <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-8">
                     Quant. Volumes
                   </TableHead>
-                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 min-w-60">
+                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 min-w-80">
                     MATERIAL SEPARAÇÃO
                   </TableHead>
-                  {lojasNumeros.map((num, index) => (
+                  {orderedStores.map((store, index) => (
                     <TableHead
-                      key={index}
+                      key={store.prefixo}
                       className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 w-12"
                     >
-                      {num}
+                      -{index + 1}
                     </TableHead>
                   ))}
                 </TableRow>
                 <TableRow className="border-gray-700 bg-gray-800/30">
                   <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700"></TableHead>
                   <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700"></TableHead>
-                  {lojas.map((loja, index) => (
+                  {orderedStores.map((store) => (
                     <TableHead
-                      key={index}
+                      key={`${store.prefixo}-name`}
                       className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 w-12"
                     >
-                      {loja}
+                      {store.prefixo}
                     </TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockSeparacao.map((item, index) => (
-                  <TableRow key={item.id} className="border-gray-700 hover:bg-gray-800/30 transition-colors">
-                    <TableCell className="text-white text-xs border-r border-gray-700 font-medium"></TableCell>
-                    <TableCell className="text-white text-xs border-r border-gray-700">{item.material}</TableCell>
-                    {lojas.map((loja, lojaIndex) => (
-                      <TableCell key={lojaIndex} className="text-center text-xs border-r border-gray-700">
-                        <span
-                          className={`${item[loja as keyof typeof item] > 0 ? "text-green-400 font-semibold" : "text-gray-500"}`}
-                        >
-                          {item[loja as keyof typeof item] || ""}
-                        </span>
+                {filteredData.length > 0 ? (
+                  filteredData.map((item, index) => (
+                    <TableRow key={item.id} className="border-gray-700 hover:bg-gray-800/30 transition-colors">
+                      <TableCell className="text-white text-xs border-r border-gray-700 font-medium"></TableCell>
+                      <TableCell className="text-white text-xs border-r border-gray-700">{item.material}</TableCell>
+                      {orderedStores.map((store) => (
+                        <TableCell key={store.prefixo} className="text-center text-xs border-r border-gray-700">
+                          <span
+                            className={`${
+                              (item[store.prefixo] as number) > 0 
+                                ? "text-green-400 font-semibold" 
+                                : "text-gray-500"
+                            }`}
+                          >
+                            {(item[store.prefixo] as number) || ""}
+                          </span>
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={orderedStores.length + 2} className="text-center text-gray-400 py-8">
+                      {filtroTipo === "Todos" 
+                        ? "Selecione um tipo de separação para visualizar os dados"
+                        : "Nenhum material encontrado para os filtros selecionados"
+                      }
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+              {filteredData.length > 0 && (
+                <tfoot>
+                  <TableRow className="bg-gray-800 border-t-2 border-gray-700">
+                    <TableHead colSpan={2} className="text-right text-white font-bold text-sm pr-4">
+                      Total Geral
+                    </TableHead>
+                    {orderedStores.map((store) => (
+                      <TableCell key={`total-${store.prefixo}`} className="text-center text-white font-bold text-sm">
+                        {totals[store.prefixo] || 0}
                       </TableCell>
                     ))}
                   </TableRow>
-                ))}
-              </TableBody>
+                </tfoot>
+              )}
             </Table>
           </div>
         </CardContent>
