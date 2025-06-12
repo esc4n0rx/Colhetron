@@ -1,8 +1,9 @@
+// app/page.tsx (versão alternativa mais limpa)
 "use client"
 
 import { useAuth } from "@/contexts/AuthContext"
-import LoginPage from "@/components/LoginPage"
-import { motion } from "framer-motion"
+import AuthPage from "@/components/auth/AuthPage"
+import { Loading } from "@/components/ui/loading"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
 
@@ -16,30 +17,28 @@ export default function Home() {
     }
   }, [user, isLoading, router])
 
+  // Loading inicial do sistema
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
-          className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
-        />
-      </div>
+      <Loading 
+        title="Colhetron"
+        subtitle="Inicializando sistema..."
+        type="auth"
+      />
     )
   }
 
+  // Usuário logado - redirecionando
   if (user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
-          className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
-        />
-        <span className="ml-3 text-white">Redirecionando...</span>
-      </div>
+      <Loading 
+        title="Bem-vindo de volta!"
+        subtitle="Redirecionando para o dashboard..."
+        type="redirect"
+      />
     )
   }
 
-  return <LoginPage />
+  // Usuário não logado - mostrar página de autenticação
+  return <AuthPage />
 }

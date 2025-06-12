@@ -1,7 +1,8 @@
+// contexts/AuthContext.tsx
 "use client"
 
-import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
+import React, { createContext, useContext, useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface User {
   id: string
@@ -25,6 +26,7 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>
   logout: () => void
   isLoading: boolean
+  isAuthenticated: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -32,6 +34,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     checkAuthStatus()
@@ -83,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         setUser(data.user)
         localStorage.setItem('colhetron_token', data.token)
+        router.push('/dashboard')
         return { success: true }
       } else {
         return { success: false, error: data.error || 'Erro no login' }
@@ -106,8 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await response.json()
 
       if (response.ok) {
-        setUser(result.user)
-        localStorage.setItem('colhetron_token', result.token)
+        // Não faz login automático após registro, retorna sucesso
         return { success: true }
       } else {
         return { success: false, error: result.error || 'Erro no registro' }
@@ -121,10 +124,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setUser(null)
     localStorage.removeItem('colhetron_token')
+    router.push('/auth')
+  }
+
+  const value: AuthContextType = {
+    user,
+    login,
+    register,
+    logout,
+    isLoading,
+    isAuthenticated: !!user
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )
@@ -133,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext)
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error('useAuth deve ser usado dentro de um AuthProvider')
   }
   return context
 }
