@@ -1,151 +1,88 @@
 // components/tabs/MediaSistemaTab.tsx
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { 
   Search, 
-  Plus, 
-  Trash2, 
-  Upload, 
+  FileText, 
   Download, 
+  Plus, 
+  Copy, 
+  Trash2, 
   Loader2, 
-  AlertCircle, 
-  CheckCircle,
-  Copy,
-  FileText,
-  Calculator
+  CheckCircle, 
+  AlertCircle,
+  AlertTriangle,
+  RefreshCw
 } from "lucide-react"
-import { useMediaAnalysisData, type MediaAnalysisItem } from "@/hooks/useMediaAnalysisData"
+import { useMediaAnalysisData } from "@/hooks/useMediaAnalysisData"
 import PasteDataModal from "@/components/modals/PasteDataModal"
 import AddItemModal from "@/components/modals/AddItemModal"
 
-interface EditableInputProps {
-  value: number
-  onSave: (value: number) => void
-  disabled?: boolean
-  className?: string
-}
-
-function EditableInput({ value, onSave, disabled, className = "" }: EditableInputProps) {
-  const [isEditing, setIsEditing] = useState(false)
-  const [tempValue, setTempValue] = useState(value.toString())
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const numValue = parseFloat(tempValue) || 0
-      onSave(numValue)
-      setIsEditing(false)
-    } else if (e.key === 'Escape') {
-      setTempValue(value.toString())
-      setIsEditing(false)
-    }
-  }
-
-  const handleBlur = () => {
-    const numValue = parseFloat(tempValue) || 0
-    onSave(numValue)
-    setIsEditing(false)
-  }
-
-  if (isEditing) {
-    return (
-      <Input
-        value={tempValue}
-        onChange={(e) => setTempValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onBlur={handleBlur}
-        className={`h-6 text-center text-xs bg-gray-800 border-blue-500 text-white ${className}`}
-        autoFocus
-        disabled={disabled}
-        type="number"
-        step="0.01"
-      />
-    )
-  }
-
-  return (
-    <div
-      onClick={() => !disabled && setIsEditing(true)}
-      className={`h-6 flex items-center justify-center cursor-pointer hover:bg-gray-700 rounded text-xs transition-colors ${
-        disabled ? 'cursor-not-allowed opacity-50' : ''
-      } text-white ${className}`}
-    >
-      {value.toFixed(2)}
-    </div>
-  )
-}
-
 export default function MediaSistemaTab() {
+  const { data, isLoading, error, addItems, clearAll, refetch } = useMediaAnalysisData()
   const [searchTerm, setSearchTerm] = useState("")
   const [showPasteModal, setShowPasteModal] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
   const [pasteSuccess, setPasteSuccess] = useState<string | null>(null)
-  
-  const { 
-    data, 
-    isLoading, 
-    error, 
-    addItems, 
-    updateItem, 
-    deleteItem, 
-    clearAll 
-  } = useMediaAnalysisData()
 
-  // Filtrar dados
+  // Filtros
   const filteredData = useMemo(() => {
     if (!searchTerm) return data
     
+    const search = searchTerm.toLowerCase()
     return data.filter(item => 
-      item.material.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      item.codigo.includes(searchTerm)
+      item.codigo.toLowerCase().includes(search) ||
+      item.material.toLowerCase().includes(search)
     )
   }, [data, searchTerm])
 
-  // Calcular totais
+  // Estatísticas
+  const stats = useMemo(() => {
+    return {
+      total: data.length,
+      ok: data.filter(item => item.status === 'OK').length,
+      atencao: data.filter(item => item.status === 'ATENÇÃO').length,
+      critico: data.filter(item => item.status === 'CRÍTICO').length,
+    }
+  }, [data])
+
+  // Totais
   const totals = useMemo(() => {
     return filteredData.reduce((acc, item) => ({
       quantidadeKg: acc.quantidadeKg + item.quantidadeKg,
       quantidadeCaixas: acc.quantidadeCaixas + item.quantidadeCaixas,
       estoqueAtual: acc.estoqueAtual + item.estoqueAtual,
-      diferencaCaixas: acc.diferencaCaixas + item.diferencaCaixas
+      diferencaCaixas: acc.diferencaCaixas + item.diferencaCaixas,
     }), {
       quantidadeKg: 0,
       quantidadeCaixas: 0,
       estoqueAtual: 0,
-      diferencaCaixas: 0
+      diferencaCaixas: 0,
     })
   }, [filteredData])
 
-  // Estatísticas
-  const stats = useMemo(() => {
-    const total = filteredData.length
-    const ok = filteredData.filter(item => item.status === 'OK').length
-    const atencao = filteredData.filter(item => item.status === 'ATENÇÃO').length
-    const critico = filteredData.filter(item => item.status === 'CRÍTICO').length
-
-    return { total, ok, atencao, critico }
-  }, [filteredData])
-
-  const handleItemUpdate = useCallback(async (id: string, field: keyof MediaAnalysisItem, value: number) => {
-    const result = await updateItem(id, { [field]: value })
-    if (!result.success && result.error) {
-      console.error('Erro ao atualizar item:', result.error)
+  const handleAddItems = async (items: any[]) => {
+    try {
+      const result = await addItems(items)
+      if (result.success) {
+        setPasteSuccess(`${items.length} itens adicionados com sucesso!`)
+        setTimeout(() => setPasteSuccess(null), 3000)
+      }
+      return result
+    } catch (error) {
+      return { success: false, error: 'Erro ao adicionar itens' }
     }
-  }, [updateItem])
-
-  const handlePasteSuccess = (count: number) => {
-    setPasteSuccess(`${count} itens adicionados com sucesso!`)
-    setTimeout(() => setPasteSuccess(null), 3000)
   }
 
   const handleClearAll = async () => {
-    if (window.confirm('Tem certeza que deseja limpar todos os dados? Esta ação não pode ser desfeita.')) {
+    if (window.confirm('Tem certeza que deseja limpar todos os dados?\n\nEsta ação não pode ser desfeita.')) {
       const result = await clearAll()
       if (result.success) {
         setPasteSuccess('Todos os dados foram limpos!')
@@ -205,6 +142,10 @@ export default function MediaSistemaTab() {
             <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-white mb-2">Erro ao carregar dados</h3>
             <p className="text-gray-400">{error}</p>
+            <Button onClick={refetch} className="mt-4 bg-blue-600 hover:bg-blue-700">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Tentar Novamente
+            </Button>
           </div>
         </div>
       </motion.div>
@@ -225,57 +166,55 @@ export default function MediaSistemaTab() {
           <p className="text-gray-400">Análise comparativa entre médias do sistema e estoque atual</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={() => setShowAddModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+            disabled={isLoading}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Adicionar Item
+          </Button>
           <Button
             onClick={() => setShowPasteModal(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-green-600 hover:bg-green-700 text-white"
+            disabled={isLoading}
           >
             <Copy className="w-4 h-4 mr-2" />
             Colar Dados
           </Button>
-          
-          <Button
-            onClick={() => setShowAddModal(true)}
-            variant="outline"
-            className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Adicionar
-          </Button>
-
           <Button
             onClick={handleExport}
-            disabled={filteredData.length === 0}
             variant="outline"
-            className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700 disabled:opacity-50"
+            className="border-gray-600 text-gray-300 hover:bg-gray-800"
+            disabled={isLoading || filteredData.length === 0}
           >
             <Download className="w-4 h-4 mr-2" />
             Exportar
           </Button>
-
           <Button
             onClick={handleClearAll}
-            disabled={data.length === 0}
             variant="outline"
-            className="bg-red-600/20 border-red-500/30 text-red-400 hover:bg-red-600/30 disabled:opacity-50"
+            className="border-red-600 text-red-400 hover:bg-red-900/20"
+            disabled={isLoading || data.length === 0}
           >
             <Trash2 className="w-4 h-4 mr-2" />
-            Limpar
+            Limpar Tudo
           </Button>
         </div>
       </div>
 
-      {/* Mensagem de Sucesso */}
+      {/* Toast de sucesso */}
       <AnimatePresence>
         {pasteSuccess && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -50 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="flex items-center space-x-2 text-green-400 text-sm bg-green-400/10 border border-green-400/20 rounded-lg p-3"
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-4 right-4 z-50 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center"
           >
-            <CheckCircle className="w-4 h-4" />
-            <span>{pasteSuccess}</span>
+            <CheckCircle className="w-5 h-5 mr-2" />
+            {pasteSuccess}
           </motion.div>
         )}
       </AnimatePresence>
@@ -286,10 +225,10 @@ export default function MediaSistemaTab() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Total de Itens</p>
+                <p className="text-gray-400 text-sm">Total</p>
                 <p className="text-2xl font-bold text-white">{stats.total}</p>
               </div>
-              <Calculator className="w-8 h-8 text-blue-400" />
+              <FileText className="w-8 h-8 text-gray-400" />
             </div>
           </CardContent>
         </Card>
@@ -313,7 +252,7 @@ export default function MediaSistemaTab() {
                 <p className="text-gray-400 text-sm">Atenção</p>
                 <p className="text-2xl font-bold text-yellow-400">{stats.atencao}</p>
               </div>
-              <AlertCircle className="w-8 h-8 text-yellow-400" />
+              <AlertTriangle className="w-8 h-8 text-yellow-400" />
             </div>
           </CardContent>
         </Card>
@@ -363,158 +302,165 @@ export default function MediaSistemaTab() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-gray-700 bg-yellow-200">
-                    <TableHead className="text-gray-800 font-bold text-sm text-center border-r border-gray-300 w-20">
+                  <TableRow className="border-gray-700 bg-gray-800/50">
+                    <TableHead className="text-gray-300 font-bold text-sm text-center border-r border-gray-700 w-32">
                       CÓDIGO
                     </TableHead>
-                    <TableHead className="text-gray-800 font-bold text-sm border-r border-gray-300 min-w-60">
+                    <TableHead className="text-gray-300 font-bold text-sm border-r border-gray-700 min-w-60">
                       MATERIAL
                     </TableHead>
-                    <TableHead className="text-gray-800 font-bold text-sm text-center border-r border-gray-300 w-24">
+                    <TableHead className="text-gray-300 font-bold text-sm text-center border-r border-gray-700 w-28">
                       Quantidade
                       <br />
                       KG
                     </TableHead>
-                    <TableHead className="text-gray-800 font-bold text-sm text-center border-r border-gray-300 w-24">
+                    <TableHead className="text-gray-300 font-bold text-sm text-center border-r border-gray-700 w-28">
                       Quantidade
                       <br />
                       Caixas
                     </TableHead>
-                    <TableHead className="text-gray-800 font-bold text-sm text-center border-r border-gray-300 w-24 bg-yellow-200">
-                      Média Sistema
+                    <TableHead className="text-gray-300 font-bold text-sm text-center border-r border-gray-700 w-32">
+                      Média
+                      <br />
+                      Sistema
                     </TableHead>
-                    <TableHead className="text-gray-800 font-bold text-sm text-center border-r border-gray-300 w-24 bg-yellow-200">
-                      Estoque Atual
+                    <TableHead className="text-gray-300 font-bold text-sm text-center border-r border-gray-700 w-28">
+                      Estoque
+                      <br />
+                      Atual
                     </TableHead>
-                    <TableHead className="text-gray-800 font-bold text-sm text-center border-r border-gray-300 w-24 bg-yellow-200">
+                    <TableHead className="text-gray-300 font-bold text-sm text-center border-r border-gray-700 w-28">
                       Diferença
                       <br />
                       em Caixas
                     </TableHead>
-                    <TableHead className="text-gray-800 font-bold text-sm text-center border-r border-gray-300 w-24 bg-yellow-200">
-                      Média Real
+                    <TableHead className="text-gray-300 font-bold text-sm text-center border-r border-gray-700 w-32">
+                      Média
+                      <br />
+                      Real
                     </TableHead>
-                    <TableHead className="text-gray-800 font-bold text-sm text-center w-20 bg-yellow-200">
-                      STATUS
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredData.map((item) => (
-                    <TableRow key={item.id} className="border-gray-300 hover:bg-gray-50 transition-colors">
-                      <TableCell className="text-gray-800 text-xs border-r border-gray-300 font-medium text-center">
-                        {item.codigo}
-                      </TableCell>
-                      <TableCell className="text-gray-800 text-xs border-r border-gray-300">
-                        {item.material}
-                      </TableCell>
-                      <TableCell className="text-center border-r border-gray-300 p-1">
-                        <EditableInput
-                          value={item.quantidadeKg}
-                          onSave={(value) => handleItemUpdate(item.id, 'quantidadeKg', value)}
-                          className="text-gray-800"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center border-r border-gray-300 p-1">
-                        <EditableInput
-                          value={item.quantidadeCaixas}
-                          onSave={(value) => handleItemUpdate(item.id, 'quantidadeCaixas', value)}
-                          className="text-gray-800"
-                        />
-                      </TableCell>
-                      <TableCell className="text-center border-r border-gray-300 bg-yellow-100">
-                        <span className="text-gray-800 font-semibold text-xs">
-                          {item.mediaSistema.toFixed(2)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center border-r border-gray-300 bg-yellow-100">
-                        <span className="text-gray-800 font-semibold text-xs">
-                          {item.estoqueAtual}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center border-r border-gray-300 bg-yellow-100">
-                        <span className="text-gray-800 font-semibold text-xs">
-                          {item.diferencaCaixas}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center border-r border-gray-300 bg-yellow-100">
-                        <span className="text-gray-800 font-semibold text-xs">
-                          {item.mediaReal.toFixed(8)}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-center bg-yellow-100">
-                        <Badge className={getStatusColor(item.status)}>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                    <TableHead className="text-gray-300 font-bold text-sm text-center w-24">
+                     STATUS
+                   </TableHead>
+                 </TableRow>
+               </TableHeader>
+               <TableBody>
+                 {filteredData.map((item) => (
+                   <TableRow key={item.id} className="border-gray-700 hover:bg-gray-800/30 transition-colors">
+                     <TableCell className="text-white text-sm border-r border-gray-700 font-mono text-center">
+                       {item.codigo}
+                     </TableCell>
+                     <TableCell className="text-white text-sm border-r border-gray-700">
+                       {item.material}
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-700">
+                       <span className="text-blue-400 font-medium">
+                         {item.quantidadeKg.toFixed(2)}
+                       </span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-700">
+                       <span className="text-green-400 font-medium">
+                         {item.quantidadeCaixas.toFixed(2)}
+                       </span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-700">
+                       <span className="text-yellow-400 font-medium">
+                         {item.mediaSistema.toFixed(8)}
+                       </span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-700">
+                       <span className="text-purple-400 font-medium">
+                         {item.estoqueAtual}
+                       </span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-700">
+                       <span className={`font-medium ${item.diferencaCaixas > 0 ? 'text-green-400' : item.diferencaCaixas < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                         {item.diferencaCaixas}
+                       </span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-700">
+                       <span className="text-orange-400 font-medium">
+                         {item.mediaReal.toFixed(8)}
+                       </span>
+                     </TableCell>
+                     <TableCell className="text-center">
+                       <Badge className={`${getStatusColor(item.status)} text-xs font-medium`}>
+                         {item.status}
+                       </Badge>
+                     </TableCell>
+                   </TableRow>
+                 ))}
+                 
+                 {/* Linha de totais */}
+                 {filteredData.length > 0 && (
+                   <TableRow className="border-gray-600 bg-gray-800/50 font-bold">
+                     <TableCell className="text-white font-bold text-sm border-r border-gray-600 text-center">
+                       TOTAL
+                     </TableCell>
+                     <TableCell className="text-white font-bold text-sm border-r border-gray-600">
+                       {filteredData.length} itens
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-600">
+                       <span className="text-blue-400 font-bold">{totals.quantidadeKg.toFixed(2)}</span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-600">
+                       <span className="text-green-400 font-bold">{totals.quantidadeCaixas.toFixed(2)}</span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-600">
+                       <span className="text-gray-400 font-bold">-</span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-600">
+                       <span className="text-purple-400 font-bold">{totals.estoqueAtual}</span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-600">
+                       <span className={`font-bold ${totals.diferencaCaixas > 0 ? 'text-green-400' : totals.diferencaCaixas < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                         {totals.diferencaCaixas}
+                       </span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm border-r border-gray-600">
+                       <span className="text-gray-400 font-bold">-</span>
+                     </TableCell>
+                     <TableCell className="text-center text-sm">
+                       <span className="text-gray-400 font-bold">-</span>
+                     </TableCell>
+                   </TableRow>
+                 )}
+               </TableBody>
+             </Table>
+           </div>
+         </CardContent>
+       </Card>
+     )}
 
-                  {/* Linha de Totais */}
-                  {filteredData.length > 0 && (
-                    <TableRow className="bg-gray-200 border-t-2 border-gray-400">
-                      <TableCell className="text-gray-800 font-bold text-xs border-r border-gray-300 text-center">
-                        TOTAL
-                      </TableCell>
-                      <TableCell className="text-gray-800 font-bold text-xs border-r border-gray-300">
-                        {filteredData.length} itens
-                      </TableCell>
-                      <TableCell className="text-center text-xs border-r border-gray-300">
-                        <span className="text-gray-800 font-bold">{totals.quantidadeKg.toFixed(2)}</span>
-                      </TableCell>
-                      <TableCell className="text-center text-xs border-r border-gray-300">
-                        <span className="text-gray-800 font-bold">{totals.quantidadeCaixas.toFixed(2)}</span>
-                      </TableCell>
-                      <TableCell className="text-center text-xs border-r border-gray-300 bg-yellow-200">
-                        <span className="text-gray-800 font-bold">-</span>
-                      </TableCell>
-                      <TableCell className="text-center text-xs border-r border-gray-300 bg-yellow-200">
-                        <span className="text-gray-800 font-bold">{totals.estoqueAtual}</span>
-                      </TableCell>
-                      <TableCell className="text-center text-xs border-r border-gray-300 bg-yellow-200">
-                        <span className="text-gray-800 font-bold">{totals.diferencaCaixas}</span>
-                      </TableCell>
-                      <TableCell className="text-center text-xs border-r border-gray-300 bg-yellow-200">
-                        <span className="text-gray-800 font-bold">-</span>
-                      </TableCell>
-                      <TableCell className="text-center text-xs bg-yellow-200">
-                        <span className="text-gray-800 font-bold">-</span>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+     {!isLoading && filteredData.length === 0 && !error && (
+       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
+         <FileText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+         <p className="text-gray-400 text-lg">Nenhum material encontrado</p>
+         <p className="text-gray-500 text-sm">
+           {data.length === 0 
+             ? "Adicione materiais usando os botões acima"
+             : "Tente ajustar os filtros de busca"
+           }
+         </p>
+       </motion.div>
+     )}
 
-      {!isLoading && filteredData.length === 0 && !error && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
-          <FileText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-400 text-lg">Nenhum material encontrado</p>
-          <p className="text-gray-500 text-sm">
-            {data.length === 0 
-              ? "Use o botão 'Colar Dados' para importar dados do Excel" 
-              : "Tente ajustar os filtros de busca"
-            }
-          </p>
-        </motion.div>
-      )}
+     {/* Modais */}
+     <PasteDataModal
+       isOpen={showPasteModal}
+       onClose={() => setShowPasteModal(false)}
+       onSuccess={(count) => {
+         setPasteSuccess(`${count} itens adicionados com sucesso!`)
+         setTimeout(() => setPasteSuccess(null), 3000)
+       }}
+       onAddItems={handleAddItems}
+     />
 
-      {/* Modais */}
-      <PasteDataModal
-        isOpen={showPasteModal}
-        onClose={() => setShowPasteModal(false)}
-        onSuccess={handlePasteSuccess}
-        onAddItems={addItems}
-      />
-
-      <AddItemModal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onAddItems={addItems}
-      />
-    </motion.div>
-  )
+     <AddItemModal
+       isOpen={showAddModal}
+       onClose={() => setShowAddModal(false)}
+       onAddItems={handleAddItems}
+     />
+   </motion.div>
+ )
 }

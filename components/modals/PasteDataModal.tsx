@@ -1,4 +1,4 @@
-// components/modals/PasteDataModal.tsx (continuação)
+// components/modals/PasteDataModal.tsx
 "use client"
 
 import { useState, useRef } from "react"
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { X, Copy, AlertCircle, CheckCircle, FileSpreadsheet, Upload } from "lucide-react"
+import { X, Copy, AlertCircle, CheckCircle, FileSpreadsheet, Upload, Loader2 } from "lucide-react"
 
 interface PasteDataModalProps {
   isOpen: boolean
@@ -31,6 +31,26 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
   const [step, setStep] = useState<"paste" | "preview">("paste")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Função para remover zeros à esquerda do código
+  const cleanCode = (codigo: string): string => {
+    // Remove todos os zeros à esquerda, mas mantém pelo menos um dígito
+    return codigo.replace(/^0+/, '') || '0'
+  }
+
+  // Função para converter números com vírgula para float
+  const parseNumber = (value: string): number => {
+    if (!value || value.trim() === '') return 0
+    
+    // Remove espaços e substitui vírgula por ponto
+    // Remove pontos que são separadores de milhares (mantém apenas a última vírgula/ponto como decimal)
+    const cleanValue = value.trim()
+      .replace(/\./g, '') // Remove pontos de milhares
+      .replace(',', '.') // Substitui vírgula decimal por ponto
+    
+    const parsed = parseFloat(cleanValue)
+    return isNaN(parsed) ? 0 : parsed
+  }
+
   const parseClipboardData = (data: string): ParsedItem[] => {
     const lines = data.trim().split('\n')
     const items: ParsedItem[] = []
@@ -43,14 +63,37 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
       const line = lines[i].trim()
       if (!line) continue
       
-      // Split by tab or comma
-      const columns = line.split(/\t|,/).map(col => col.trim())
+      // Split primarily by tab, then by comma as fallback
+      let columns: string[]
+      if (line.includes('\t')) {
+        columns = line.split('\t').map(col => col.trim())
+      } else {
+        columns = line.split(',').map(col => col.trim())
+      }
       
-      if (columns.length >= 4) {
-        const codigo = columns[0]
+      console.log(`Linha ${i}: `, columns) // Debug
+      
+      if (columns.length >= 3) {
+        // Código sempre tem zeros removidos
+        const codigoRaw = columns[0]
+        const codigo = cleanCode(codigoRaw)
         const material = columns[1]
-        const quantidadeKg = parseFloat(columns[2]) || 0
-        const quantidadeCaixas = parseFloat(columns[3]) || 0
+        
+        // Quantidade KG (coluna 2)
+        const quantidadeKg = parseNumber(columns[2])
+        
+        // Quantidade Caixas (coluna 3)
+        const quantidadeCaixas = parseNumber(columns[3])
+        
+        console.log(`Processando item:`, {
+          codigoRaw,
+          codigo,
+          material,
+          quantidadeKgRaw: columns[2],
+          quantidadeKg,
+          quantidadeCaixasRaw: columns[3],
+          quantidadeCaixas
+        }) // Debug
         
         if (codigo && material && (quantidadeKg > 0 || quantidadeCaixas > 0)) {
           items.push({
@@ -71,8 +114,12 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
     const clipboardData = e.clipboardData.getData('text')
     setPastedData(clipboardData)
     
+    console.log('Dados colados:', clipboardData) // Debug
+    
     try {
       const parsed = parseClipboardData(clipboardData)
+      console.log('Itens processados:', parsed) // Debug
+      
       if (parsed.length === 0) {
         setError('Nenhum dado válido encontrado. Verifique o formato dos dados.')
         return
@@ -82,6 +129,7 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
       setError("")
       setStep("preview")
     } catch (err) {
+      console.error('Erro ao processar dados:', err)
       setError('Erro ao processar dados. Verifique o formato.')
     }
   }
@@ -155,7 +203,7 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="w-full max-w-4xl max-h-[90vh] overflow-hidden"
+            className="w-full max-w-5xl max-h-[90vh] overflow-hidden"
           >
             <Card className="bg-gray-900 border-gray-700">
               <CardHeader className="flex flex-row items-center justify-between">
@@ -185,8 +233,19 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
                       <ul className="text-blue-300 text-sm space-y-1">
                         <li>1. Copie os dados do Excel (Ctrl+C)</li>
                         <li>2. Cole aqui usando Ctrl+V ou clique na área abaixo</li>
-                        <li>3. Formato esperado: CÓDIGO | MATERIAL | Quantidade KG | Quantidade Caixas</li>
+                        <li>3. Formato: CÓDIGO | MATERIAL | Quantidade KG | Quantidade Caixas</li>
+                        <li>4. Aceita números com vírgula (ex: 1.020,000 ou 10,000000)</li>
+                        <li>5. Os zeros à esquerda do código serão removidos automaticamente</li>
                       </ul>
+                    </div>
+
+                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+                      <h4 className="text-yellow-400 font-semibold mb-2">Exemplo de formato aceito:</h4>
+                      <pre className="text-yellow-300 text-sm font-mono bg-gray-800 p-2 rounded">
+{`000000000000139912	ABACAXI UND	60,000	10,000000
+000000000000100007	ABOBORA JAPONESA KG	1.020,000	34,000000
+000000000000100008	ABOBORA MADURA KG	1.020,000	34,000000`}
+                      </pre>
                     </div>
 
                     <div className="space-y-4">
@@ -212,35 +271,32 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
                         value={pastedData}
                         onChange={(e) => setPastedData(e.target.value)}
                         placeholder="Ou cole os dados aqui manualmente..."
-                        className="w-full h-32 p-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 resize-none"
+                        className="w-full h-32 p-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 resize-none font-mono text-sm"
                         disabled={isLoading}
                       />
 
                       {error && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="flex items-center space-x-2 text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg p-3"
-                        >
-                          <AlertCircle className="w-4 h-4" />
-                          <span>{error}</span>
-                        </motion.div>
+                        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center">
+                          <AlertCircle className="w-5 h-5 text-red-400 mr-2 flex-shrink-0" />
+                          <span className="text-red-300 text-sm">{error}</span>
+                        </div>
                       )}
 
-                      <div className="flex justify-end space-x-2">
-                        <Button
-                          variant="outline"
+                      <div className="flex justify-end space-x-3">
+                        <Button 
+                          variant="outline" 
                           onClick={handleClose}
                           disabled={isLoading}
-                          className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700"
+                          className="border-gray-600 text-gray-300 hover:bg-gray-800"
                         >
                           Cancelar
                         </Button>
-                        <Button
+                        <Button 
                           onClick={handleManualPaste}
                           disabled={!pastedData.trim() || isLoading}
-                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                          className="bg-blue-600 hover:bg-blue-700"
                         >
+                          {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                           Processar Dados
                         </Button>
                       </div>
@@ -274,20 +330,31 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
                         </TableHeader>
                         <TableBody>
                           {parsedItems.map((item, index) => {
-                            const mediaSistema = item.quantidadeCaixas > 0 ? item.quantidadeKg / item.quantidadeCaixas : 0
-                            
+                            const mediaSistema = item.quantidadeCaixas > 0 ? 
+                              (item.quantidadeKg / item.quantidadeCaixas) : 0
+
                             return (
                               <TableRow key={index} className="border-gray-700">
-                                <TableCell className="text-white text-xs font-mono">{item.codigo}</TableCell>
-                                <TableCell className="text-white text-xs">{item.material}</TableCell>
-                                <TableCell className="text-center text-xs text-blue-400">
-                                  {item.quantidadeKg.toFixed(2)}
+                                <TableCell className="text-white text-xs font-mono">
+                                  {item.codigo}
                                 </TableCell>
-                                <TableCell className="text-center text-xs text-blue-400">
-                                  {item.quantidadeCaixas.toFixed(2)}
+                                <TableCell className="text-white text-xs">
+                                  {item.material}
                                 </TableCell>
-                                <TableCell className="text-center text-xs text-green-400">
-                                  {mediaSistema.toFixed(2)}
+                                <TableCell className="text-center text-xs">
+                                  <span className="text-blue-400 font-medium">
+                                    {item.quantidadeKg.toFixed(3)}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-center text-xs">
+                                  <span className="text-green-400 font-medium">
+                                    {item.quantidadeCaixas.toFixed(6)}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-center text-xs">
+                                  <span className="text-yellow-400 font-medium">
+                                    {mediaSistema.toFixed(8)}
+                                  </span>
                                 </TableCell>
                               </TableRow>
                             )
@@ -297,50 +364,37 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
                     </div>
 
                     {error && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center space-x-2 text-red-400 text-sm bg-red-400/10 border border-red-400/20 rounded-lg p-3"
-                      >
-                        <AlertCircle className="w-4 h-4" />
-                        <span>{error}</span>
-                      </motion.div>
+                      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center">
+                        <AlertCircle className="w-5 h-5 text-red-400 mr-2 flex-shrink-0" />
+                        <span className="text-red-300 text-sm">{error}</span>
+                      </div>
                     )}
 
                     <div className="flex justify-between">
-                      <Button
-                        variant="outline"
+                      <Button 
+                        variant="outline" 
                         onClick={handleBack}
                         disabled={isLoading}
-                        className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700"
+                        className="border-gray-600 text-gray-300 hover:bg-gray-800"
                       >
                         Voltar
                       </Button>
-                      
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="outline"
+                      <div className="flex space-x-3">
+                        <Button 
+                          variant="outline" 
                           onClick={handleClose}
                           disabled={isLoading}
-                          className="bg-gray-800 border-gray-700 text-white hover:bg-gray-700"
+                          className="border-gray-600 text-gray-300 hover:bg-gray-800"
                         >
                           Cancelar
                         </Button>
-                        <Button
+                        <Button 
                           onClick={handleConfirm}
                           disabled={isLoading}
-                          className="bg-green-600 hover:bg-green-700 text-white"
+                          className="bg-green-600 hover:bg-green-700"
                         >
-                          {isLoading ? (
-                            <motion.div
-                              animate={{ rotate: 360 }}
-                              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                              className="w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"
-                            />
-                          ) : (
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                          )}
-                          {isLoading ? "Adicionando..." : "Confirmar e Adicionar"}
+                          {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                          Confirmar e Adicionar
                         </Button>
                       </div>
                     </div>

@@ -1,4 +1,3 @@
-// app/api/media-analysis/clear/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -18,21 +17,20 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Deletar todos os itens do usuário
-    const { error: deleteError } = await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .delete()
       .eq('user_id', decoded.userId)
 
-    if (deleteError) {
-      console.error('Erro ao limpar dados:', deleteError)
+    if (error) {
+      console.error('Erro ao limpar análise de médias:', error)
       return NextResponse.json({ error: 'Erro ao limpar dados' }, { status: 500 })
     }
 
     return NextResponse.json({ message: 'Todos os dados foram limpos com sucesso' })
 
   } catch (error) {
-    console.error('Erro na limpeza:', error)
+    console.error('Erro na API de limpeza:', error)
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
   }
 }

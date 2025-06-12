@@ -1,11 +1,22 @@
-// app/api/media-analysis/data/route.ts (corrigido)
+// app/api/media-analysis/bulk-add/route.ts (corrigido)
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { z } from 'zod'
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
-export async function GET(request: NextRequest) {
+const bulkAddSchema = z.object({
+  items: z.array(z.object({
+    codigo: z.string().min(1, 'Código é obrigatório'),
+    material: z.string().min(1, 'Material é obrigatório'),
+    quantidade_kg: z.number().min(0, 'Quantidade KG deve ser >= 0'),
+    quantidade_caixas: z.number().min(0, 'Quantidade Caixas deve ser >= 0'),
+    media_sistema: z.number().min(0, 'Média Sistema deve ser >= 0')
+  })).min(1, 'Pelo menos um item é necessário')
+})
+
+export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -18,65 +29,91 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Buscar dados de análise de médias do usuário
-    const { data: mediaAnalysis, error } = await supabaseAdmin
-      .from('colhetron_media_analysis')
-      .select('*')
-      .eq('user_id', decoded.userId)
-      .order('created_at', { ascending: false })
+    const body = await request.json()
+    const validatedData = bulkAddSchema.parse(body)
 
-    if (error) {
-      console.error('Erro ao buscar análise de médias:', error)
-      return NextResponse.json({ error: 'Erro ao buscar dados' }, { status: 500 })
+    // Verificar se já existem códigos duplicados
+    const codigos = validatedData.items.map(item => item.codigo)
+    const { data: existingItems } = await supabaseAdmin
+      .from('colhetron_media_analysis')
+      .select('codigo')
+      .eq('user_id', decoded.userId)
+      .in('codigo', codigos)
+
+    if (existingItems && existingItems.length > 0) {
+      const duplicateCodes = existingItems.map(item => item.codigo)
+      return NextResponse.json(
+        { error: `Os seguintes códigos já existem: ${duplicateCodes.join(', ')}` },
+        { status: 409 }
+      )
     }
 
-    // Atualizar estoque atual para todos os itens
-    const updatedData = await Promise.all(
-      (mediaAnalysis || []).map(async (item) => {
+    // Calcular estoque atual para cada item baseado nas separações
+    const itemsToInsert = await Promise.all(
+      validatedData.items.map(async (item) => {
         const estoqueAtual = await calculateEstoqueAtual(decoded.userId, item.codigo)
         
-        // Recalcular diferença em caixas e média real
+        // Calcular diferença em caixas
         const diferencaCaixas = estoqueAtual - item.quantidade_caixas
+        
+        // Calcular média real
         const mediaReal = estoqueAtual > 0 ? (item.quantidade_kg / estoqueAtual) : 0
         
-        // Recalcular status
+        // Determinar status baseado na diferença
         let status = 'OK'
-        if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.1) {
+        if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.1) { // Mais de 10% de diferença
           status = 'ATENÇÃO'
         }
-        if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.2) {
+        if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.2) { // Mais de 20% de diferença
           status = 'CRÍTICO'
         }
         if (estoqueAtual === 0) {
           status = 'CRÍTICO'
         }
 
-        // Atualizar no banco de dados
-        await supabaseAdmin
-          .from('colhetron_media_analysis')
-          .update({
-            estoque_atual: estoqueAtual,
-            diferenca_caixas: diferencaCaixas,
-            media_real: mediaReal,
-            status,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', item.id)
-
         return {
-          ...item,
+          codigo: item.codigo,
+          material: item.material,
+          quantidade_kg: item.quantidade_kg,
+          quantidade_caixas: item.quantidade_caixas,
+          media_sistema: item.media_sistema,
           estoque_atual: estoqueAtual,
           diferenca_caixas: diferencaCaixas,
           media_real: mediaReal,
-          status
+          status,
+          user_id: decoded.userId,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }
       })
     )
 
-    return NextResponse.json({ data: updatedData })
+    // Inserir itens em lote
+    const { data: insertedItems, error } = await supabaseAdmin
+      .from('colhetron_media_analysis')
+      .insert(itemsToInsert)
+      .select()
+
+    if (error) {
+      console.error('Erro ao inserir itens:', error)
+      return NextResponse.json({ error: 'Erro ao inserir itens' }, { status: 500 })
+    }
+
+    return NextResponse.json({ 
+      message: `${insertedItems.length} itens adicionados com sucesso`,
+      data: insertedItems 
+    })
 
   } catch (error) {
-    console.error('Erro na API de análise de médias:', error)
+    console.error('Erro na API de adição em lote:', error)
+    
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
+
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
   }
 }
@@ -93,6 +130,7 @@ async function calculateEstoqueAtual(userId: string, codigo: string): Promise<nu
       .single()
 
     if (sepError || !activeSeparation) {
+      console.log(`Nenhuma separação ativa encontrada para o usuário ${userId}`)
       return 0
     }
 
@@ -109,6 +147,7 @@ async function calculateEstoqueAtual(userId: string, codigo: string): Promise<nu
     }
 
     if (!separationItems || separationItems.length === 0) {
+      console.log(`Nenhum item encontrado para o código ${codigo}`)
       return 0 // Não há separações para este material
     }
 
@@ -129,9 +168,11 @@ async function calculateEstoqueAtual(userId: string, codigo: string): Promise<nu
       if (quantities && quantities.length > 0) {
         const itemTotal = quantities.reduce((sum, q) => sum + (q.quantity || 0), 0)
         totalQuantity += itemTotal
+        console.log(`Item ${item.id} do código ${codigo}: ${itemTotal} unidades`)
       }
     }
 
+    console.log(`Estoque total para código ${codigo}: ${totalQuantity}`)
     return totalQuantity
 
   } catch (error) {

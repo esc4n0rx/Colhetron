@@ -74,146 +74,92 @@ export function useMediaAnalysisData() {
     }
   }, [user])
 
-  const addItems = async (items: Omit<MediaAnalysisItem, 'id' | 'mediaSistema' | 'estoqueAtual' | 'diferencaCaixas' | 'mediaReal' | 'status' | 'created_at' | 'updated_at'>[]) => {
+  const addItems = useCallback(async (items: any[]) => {
     try {
       const token = localStorage.getItem('colhetron_token')
-      if (!token) throw new Error('Token não encontrado')
-
-      const response = await fetch('/api/media-analysis/bulk-insert', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ items })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro ao adicionar itens')
+      if (!token) {
+        throw new Error('Token de autorização não encontrado')
       }
 
-      await fetchData() // Recarregar dados
-      return { success: true }
+      // Processar itens e calcular valores automaticamente
+      const processedItems = items.map(item => {
+        // Remover zeros à esquerda do código
+        const codigo = item.codigo.replace(/^0+/, '') || '0'
+        
+        // Se quantidade de caixas não foi fornecida ou é zero, calcular
+        let quantidadeCaixas = item.quantidadeCaixas || 0
+        if (quantidadeCaixas === 0 && item.quantidadeKg > 0) {
+          quantidadeCaixas = 1 // Assume 1 caixa se não especificado
+        }
 
-    } catch (error) {
-      console.error('Erro ao adicionar itens:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido' 
-      }
-    }
-  }
+        // Calcular média do sistema
+        const mediaSistema = quantidadeCaixas > 0 ? (item.quantidadeKg / quantidadeCaixas) : 0
 
-  const updateItem = async (id: string, updates: Partial<MediaAnalysisItem>) => {
-    try {
-      const token = localStorage.getItem('colhetron_token')
-      if (!token) throw new Error('Token não encontrado')
-
-      // Mapear campos do frontend para o banco
-      const mappedUpdates: any = {}
-      if ('quantidadeKg' in updates) mappedUpdates.quantidade_kg = updates.quantidadeKg
-      if ('quantidadeCaixas' in updates) mappedUpdates.quantidade_caixas = updates.quantidadeCaixas
-
-      const response = await fetch(`/api/media-analysis/item/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(mappedUpdates)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro ao atualizar item')
-      }
-
-      const updatedItem = await response.json()
-      
-      // Mapear resposta e atualizar localmente
-      const mappedItem = {
-        ...updatedItem,
-        quantidadeKg: updatedItem.quantidade_kg,
-        quantidadeCaixas: updatedItem.quantidade_caixas,
-        mediaSistema: updatedItem.media_sistema,
-        estoqueAtual: updatedItem.estoque_atual,
-        diferencaCaixas: updatedItem.diferenca_caixas,
-        mediaReal: updatedItem.media_real
-      }
-
-      setData(prev => prev.map(item => 
-        item.id === id ? { ...item, ...mappedItem } : item
-      ))
-
-      return { success: true }
-
-    } catch (error) {
-      console.error('Erro ao atualizar item:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido' 
-      }
-    }
-  }
-
-  const deleteItem = async (id: string) => {
-    try {
-      const token = localStorage.getItem('colhetron_token')
-      if (!token) throw new Error('Token não encontrado')
-
-      const response = await fetch(`/api/media-analysis/item/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
+        return {
+          codigo,
+          material: item.material,
+          quantidade_kg: item.quantidadeKg,
+          quantidade_caixas: quantidadeCaixas,
+          media_sistema: mediaSistema
         }
       })
 
+      const response = await fetch('/api/media-analysis/bulk-add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ items: processedItems }),
+      })
+
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro ao deletar item')
+        throw new Error(errorData.error || 'Falha ao adicionar itens')
       }
 
-      setData(prev => prev.filter(item => item.id !== id))
+      // Recarregar dados após adicionar
+      await fetchData()
+      
       return { success: true }
-
-    } catch (error) {
-      console.error('Erro ao deletar item:', error)
+    } catch (err) {
+      console.error('Erro ao adicionar itens:', err)
       return { 
         success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido' 
+        error: err instanceof Error ? err.message : 'Erro desconhecido' 
       }
     }
-  }
+  }, [fetchData])
 
-  const clearAll = async () => {
+  const clearAll = useCallback(async () => {
     try {
       const token = localStorage.getItem('colhetron_token')
-      if (!token) throw new Error('Token não encontrado')
+      if (!token) {
+        throw new Error('Token de autorização não encontrado')
+      }
 
       const response = await fetch('/api/media-analysis/clear', {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${token}`,
+        },
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro ao limpar dados')
+        throw new Error(errorData.error || 'Falha ao limpar dados')
       }
 
       setData([])
       return { success: true }
-
-    } catch (error) {
-      console.error('Erro ao limpar dados:', error)
+    } catch (err) {
+      console.error('Erro ao limpar dados:', err)
       return { 
         success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido' 
+        error: err instanceof Error ? err.message : 'Erro desconhecido' 
       }
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchData()
@@ -224,8 +170,6 @@ export function useMediaAnalysisData() {
     isLoading,
     error,
     addItems,
-    updateItem,
-    deleteItem,
     clearAll,
     refetch: fetchData
   }
