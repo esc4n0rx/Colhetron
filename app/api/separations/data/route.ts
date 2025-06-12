@@ -1,9 +1,8 @@
-// app/api/separations/data/route.ts (ATUALIZADO)
+
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 export async function GET(request: NextRequest) {
   try {

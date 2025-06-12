@@ -1,4 +1,4 @@
-// app/dashboard/page.tsx (ATUALIZADO)
+
 "use client"
 
 import { useState, useEffect } from "react"

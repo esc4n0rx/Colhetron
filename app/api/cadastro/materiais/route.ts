@@ -1,10 +1,10 @@
-// app/api/cadastro/materiais/route.ts
+
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { z } from 'zod'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+
 
 const materialSchema = z.object({
   material: z.string().min(1, 'Material é obrigatório'),

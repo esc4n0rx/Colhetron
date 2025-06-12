@@ -1,10 +1,10 @@
-// app/api/separations/update-item-type/route.ts (NOVO ARQUIVO)
+
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { z } from 'zod'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+
 
 const updateSchema = z.object({
   itemId: z.string(),

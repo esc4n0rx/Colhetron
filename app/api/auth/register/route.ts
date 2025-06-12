@@ -3,8 +3,6 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { hashPassword, generateToken } from '@/lib/auth'
 import { z } from 'zod'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const registerSchema = z.object({
   email: z.string().email('Email inválido').min(1, 'Email é obrigatório'),
   password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),

@@ -3,9 +3,6 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { verifyPassword, generateToken } from '@/lib/auth'
 import { loginSchema } from '@/lib/validations'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()

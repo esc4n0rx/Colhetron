@@ -1,10 +1,10 @@
-// app/api/separations/upload/route.ts (ATUALIZADO)
+
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+
 
 interface ProcessedData {
   materials: Array<{

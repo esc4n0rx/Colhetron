@@ -1,4 +1,3 @@
-// app/api/auth/forgot-password/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { forgotPasswordSchema } from '@/lib/auth'

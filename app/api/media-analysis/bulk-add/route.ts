@@ -1,10 +1,9 @@
-// app/api/media-analysis/bulk-add/route.ts (corrigido)
+
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { z } from 'zod'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 const bulkAddSchema = z.object({
   items: z.array(z.object({
