@@ -55,12 +55,10 @@ export async function GET(request: NextRequest) {
         description,
         colhetron_separation_quantities (
           quantity,
-          store_prefix
+          store_code
         )
       `)
       .eq('separation_id', targetSeparationId)
-
-      // app/api/media-analysis/data/route.ts - Continuação
     if (itemsError) {
       console.error('Erro ao buscar itens de separação:', itemsError)
       return NextResponse.json({ error: 'Erro ao buscar dados' }, { status: 500 })
@@ -87,7 +85,7 @@ export async function GET(request: NextRequest) {
         const estoqueAtual = await calculateEstoqueAtual(decoded.userId, item.material_code)
         
         // Calcular diferença e média real
-        const diferencaCaixas = estoqueAtual - totalQuantidadeCaixas
+        const diferencaCaixas = totalQuantidadeCaixas-estoqueAtual
         const mediaReal = estoqueAtual > 0 && totalQuantidadeCaixas > 0 ? 
           totalQuantidadeKg / estoqueAtual : 0
 
