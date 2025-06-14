@@ -38,12 +38,16 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
   }
 
   // Função para converter números com vírgula para float
-  const parseNumber = (value: string): number => {
-    if (!value || value.trim() === '') return 0
+  const parseNumber = (value: string | number | undefined | null): number => {
+    if (value === undefined || value === null || value === '') return 0
+    
+    if (typeof value === 'number') {
+      return isNaN(value) ? 0 : value
+    }
     
     // Remove espaços e substitui vírgula por ponto
     // Remove pontos que são separadores de milhares (mantém apenas a última vírgula/ponto como decimal)
-    const cleanValue = value.trim()
+    const cleanValue = String(value).trim()
       .replace(/\./g, '') // Remove pontos de milhares
       .replace(',', '.') // Substitui vírgula decimal por ponto
     
@@ -63,39 +67,22 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
       const line = lines[i].trim()
       if (!line) continue
       
-      // Split primarily by tab, then by comma as fallback
-      let columns: string[]
-      if (line.includes('\t')) {
-        columns = line.split('\t').map(col => col.trim())
-      } else {
-        columns = line.split(',').map(col => col.trim())
-      }
+      // Split by tab or multiple spaces or semicolon
+      const columns = line.split(/\t|;|  +/).map(col => col.trim())
       
-      console.log(`Linha ${i}: `, columns) // Debug
-      
-      if (columns.length >= 3) {
-        // Código sempre tem zeros removidos
-        const codigoRaw = columns[0]
-        const codigo = cleanCode(codigoRaw)
-        const material = columns[1]
+      if (columns.length >= 2) {
+        const codigo = cleanCode(columns[0] || '')
+        const material = columns[1] || ''
         
-        // Quantidade KG (coluna 2)
-        const quantidadeKg = parseNumber(columns[2])
+        // Tratar valores de quantidade que podem vir como undefined, null ou string vazia
+        const quantidadeKgRaw = columns[2] || '0'
+        const quantidadeCaixasRaw = columns[3] || '0'
         
-        // Quantidade Caixas (coluna 3)
-        const quantidadeCaixas = parseNumber(columns[3])
+        const quantidadeKg = parseNumber(quantidadeKgRaw)
+        const quantidadeCaixas = parseNumber(quantidadeCaixasRaw)
         
-        console.log(`Processando item:`, {
-          codigoRaw,
-          codigo,
-          material,
-          quantidadeKgRaw: columns[2],
-          quantidadeKg,
-          quantidadeCaixasRaw: columns[3],
-          quantidadeCaixas
-        }) // Debug
-        
-        if (codigo && material && (quantidadeKg > 0 || quantidadeCaixas > 0)) {
+        // Só adiciona se tem código e material válidos
+        if (codigo && material && codigo !== '0' && material.length > 0) {
           items.push({
             codigo,
             material,

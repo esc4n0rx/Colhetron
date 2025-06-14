@@ -74,62 +74,74 @@ export function useMediaAnalysisData() {
     }
   }, [user])
 
-  const addItems = useCallback(async (items: any[]) => {
-    try {
-      const token = localStorage.getItem('colhetron_token')
-      if (!token) {
-        throw new Error('Token de autorização não encontrado')
-      }
-
-      // Processar itens e calcular valores automaticamente
-      const processedItems = items.map(item => {
-        // Remover zeros à esquerda do código
-        const codigo = item.codigo.replace(/^0+/, '') || '0'
-        
-        // Se quantidade de caixas não foi fornecida ou é zero, calcular
-        let quantidadeCaixas = item.quantidadeCaixas || 0
-        if (quantidadeCaixas === 0 && item.quantidadeKg > 0) {
-          quantidadeCaixas = 1 // Assume 1 caixa se não especificado
-        }
-
-        // Calcular média do sistema
-        const mediaSistema = quantidadeCaixas > 0 ? (item.quantidadeKg / quantidadeCaixas) : 0
-
-        return {
-          codigo,
-          material: item.material,
-          quantidade_kg: item.quantidadeKg,
-          quantidade_caixas: quantidadeCaixas,
-          media_sistema: mediaSistema
-        }
-      })
-
-      const response = await fetch('/api/media-analysis/bulk-add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ items: processedItems }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Falha ao adicionar itens')
-      }
-
-      // Recarregar dados após adicionar
-      await fetchData()
-      
-      return { success: true }
-    } catch (err) {
-      console.error('Erro ao adicionar itens:', err)
-      return { 
-        success: false, 
-        error: err instanceof Error ? err.message : 'Erro desconhecido' 
-      }
+  // hooks/useMediaAnalysisData.ts - addItems corrigido
+const addItems = useCallback(async (items: any[]) => {
+  try {
+    const token = localStorage.getItem('colhetron_token')
+    if (!token) {
+      throw new Error('Token de autorização não encontrado')
     }
-  }, [fetchData])
+
+    // CORREÇÃO: Mapear corretamente os nomes das propriedades
+    const processedItems = items.map(item => {
+      // Remover zeros à esquerda do código
+      const codigo = String(item.codigo || '').replace(/^0+/, '') || '0'
+      
+      // Mapear propriedades corretamente
+      const quantidadeKg = Number(item.quantidadeKg || item.quantidade_kg || 0)
+      const quantidadeCaixas = Number(item.quantidadeCaixas || item.quantidade_caixas || 0)
+
+      // Calcular média do sistema
+      const mediaSistema = quantidadeCaixas > 0 ? (quantidadeKg / quantidadeCaixas) : 0
+
+      return {
+        codigo,
+        material: String(item.material || ''),
+        quantidade_kg: quantidadeKg,  // Nome correto para a API
+        quantidade_caixas: quantidadeCaixas,  // Nome correto para a API  
+        media_sistema: Number(mediaSistema.toFixed(2))
+      }
+    }).filter(item => 
+      // Filtrar apenas itens válidos
+      item.codigo && item.material && item.codigo.length > 0 && item.material.length > 0
+    )
+
+    if (processedItems.length === 0) {
+      throw new Error('Nenhum item válido encontrado nos dados')
+    }
+
+    console.log('Enviando itens processados:', processedItems)
+
+    const response = await fetch('/api/media-analysis/bulk-add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ items: processedItems }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error('Erro da API:', errorData)
+      throw new Error(errorData.error || 'Falha ao adicionar itens')
+    }
+
+    const result = await response.json()
+    console.log('Resposta da API:', result)
+
+    // Recarregar dados após adicionar
+    await fetchData()
+    
+    return { success: true }
+  } catch (err) {
+    console.error('Erro ao adicionar itens:', err)
+    return { 
+      success: false, 
+      error: err instanceof Error ? err.message : 'Erro desconhecido' 
+    }
+  }
+}, [fetchData])
 
   const clearAll = useCallback(async () => {
     try {

@@ -5,7 +5,6 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-logger'
 import { z } from 'zod'
 
-
 const bulkAddSchema = z.object({
   items: z.array(z.object({
     codigo: z.string().min(1, 'Código é obrigatório'),
@@ -29,10 +28,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
+    // OBRIGATÓRIO: Verificar se há separação ativa
+    const { data: activeSeparation } = await supabaseAdmin
+      .from('colhetron_separations')
+      .select('id')
+      .eq('user_id', decoded.userId)
+      .eq('status', 'active')
+      .single()
+
+    if (!activeSeparation) {
+      return NextResponse.json({ 
+        error: 'Nenhuma separação ativa encontrada. Crie ou ative uma separação primeiro.' 
+      }, { status: 400 })
+    }
+
     const body = await request.json()
+    console.log('Dados recebidos na API:', JSON.stringify(body, null, 2))
+
+    // Como os dados já vêm processados do frontend, validar diretamente
     const validatedData = bulkAddSchema.parse(body)
 
-    // Verificar se já existem códigos duplicados
+    // Verificar códigos duplicados existentes
     const codigos = validatedData.items.map(item => item.codigo)
     const { data: existingItems } = await supabaseAdmin
       .from('colhetron_media_analysis')
@@ -48,27 +64,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calcular estoque atual para cada item baseado nas separações
+    // Processar cada item e calcular valores com base na separação ativa
     const itemsToInsert = await Promise.all(
       validatedData.items.map(async (item) => {
-        const estoqueAtual = await calculateEstoqueAtual(decoded.userId, item.codigo)
+        // Calcular estoque atual baseado na separação ativa
+        const estoqueAtual = await calculateEstoqueAtual(decoded.userId, item.codigo, activeSeparation.id)
         
-        // Calcular diferença em caixas
-        const diferencaCaixas = estoqueAtual - item.quantidade_caixas
-        
-        // Calcular média real
-        const mediaReal = estoqueAtual > 0 ? (item.quantidade_kg / estoqueAtual) : 0
+        // Calcular diferença e média real
+        const diferencaCaixas =  item.quantidade_caixas - estoqueAtual 
+        const mediaReal = estoqueAtual > 0 && item.quantidade_kg > 0 ? 
+          item.quantidade_kg / estoqueAtual : 0
         
         // Determinar status baseado na diferença
         let status = 'OK'
-        if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.1) { // Mais de 10% de diferença
-          status = 'ATENÇÃO'
-        }
-        if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.2) { // Mais de 20% de diferença
-          status = 'CRÍTICO'
-        }
         if (estoqueAtual === 0) {
           status = 'CRÍTICO'
+        } else if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.2) {
+          status = 'CRÍTICO'
+        } else if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.1) {
+          status = 'ATENÇÃO'
         }
 
         return {
@@ -76,19 +90,20 @@ export async function POST(request: NextRequest) {
           material: item.material,
           quantidade_kg: item.quantidade_kg,
           quantidade_caixas: item.quantidade_caixas,
-          media_sistema: item.media_sistema,
+          media_sistema: Number(item.media_sistema.toFixed(2)),
           estoque_atual: estoqueAtual,
           diferenca_caixas: diferencaCaixas,
-          media_real: mediaReal,
+          media_real: Number(mediaReal.toFixed(2)),
           status,
           user_id: decoded.userId,
+          separation_id: activeSeparation.id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
       })
     )
 
-    // Inserir itens em lote
+    // Inserir itens na tabela colhetron_media_analysis
     const { data: insertedItems, error } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .insert(itemsToInsert)
@@ -102,13 +117,13 @@ export async function POST(request: NextRequest) {
     await logActivity({
       userId: decoded.userId,
       action: 'Análise de médias realizada',
-      details: `Análise executada com sucesso itens processados`,
+      details: `${insertedItems.length} itens processados na análise de médias`,
       type: 'media_analysis',
     })
 
     return NextResponse.json({ 
       message: `${insertedItems.length} itens adicionados com sucesso`,
-      data: insertedItems 
+      data: insertedItems
     })
 
   } catch (error) {
@@ -125,63 +140,35 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Função para calcular estoque atual baseado nas separações (CORRIGIDA)
-async function calculateEstoqueAtual(userId: string, codigo: string): Promise<number> {
+// Função para calcular estoque atual baseado na separação ativa
+async function calculateEstoqueAtual(userId: string, codigo: string, separationId: string): Promise<number> {
   try {
-    // 1. Buscar separação ativa do usuário
-    const { data: activeSeparation, error: sepError } = await supabaseAdmin
-      .from('colhetron_separations')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single()
-
-    if (sepError || !activeSeparation) {
-      console.log(`Nenhuma separação ativa encontrada para o usuário ${userId}`)
-      return 0
-    }
-
-    // 2. Buscar o item na tabela colhetron_separation_items pelo material_code
-    const { data: separationItems, error: itemsError } = await supabaseAdmin
+    // Buscar o item na separação pelo material_code
+    const { data: separationItems } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select('id')
-      .eq('separation_id', activeSeparation.id)
+      .eq('separation_id', separationId)
       .eq('material_code', codigo)
 
-    if (itemsError) {
-      console.error('Erro ao buscar itens de separação:', itemsError)
-      return 0
-    }
-
     if (!separationItems || separationItems.length === 0) {
-      console.log(`Nenhum item encontrado para o código ${codigo}`)
-      return 0 // Não há separações para este material
+      return 0 // Material não existe na separação
     }
 
-    // 3. Para cada item encontrado, somar as quantidades em colhetron_separation_quantities
+    // Somar todas as quantidades do material na separação
     let totalQuantity = 0
-
     for (const item of separationItems) {
-      const { data: quantities, error: quantitiesError } = await supabaseAdmin
+      const { data: quantities } = await supabaseAdmin
         .from('colhetron_separation_quantities')
         .select('quantity')
         .eq('item_id', item.id)
 
-      if (quantitiesError) {
-        console.error('Erro ao buscar quantidades:', quantitiesError)
-        continue
-      }
-
       if (quantities && quantities.length > 0) {
         const itemTotal = quantities.reduce((sum, q) => sum + (q.quantity || 0), 0)
         totalQuantity += itemTotal
-        console.log(`Item ${item.id} do código ${codigo}: ${itemTotal} unidades`)
       }
     }
 
-    console.log(`Estoque total para código ${codigo}: ${totalQuantity}`)
     return totalQuantity
-
   } catch (error) {
     console.error('Erro ao calcular estoque atual:', error)
     return 0

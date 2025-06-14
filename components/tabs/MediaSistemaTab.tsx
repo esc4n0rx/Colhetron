@@ -11,17 +11,13 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { 
   Plus, 
   Search, 
-  Download, 
-  Upload, 
-  BarChart3, 
-  TrendingUp, 
-  TrendingDown,
+  RefreshCw,
+  Copy,
   AlertCircle,
   Package,
-  Database,
-  RefreshCw,
+  Trash2,
   Activity,
-  Copy
+  AlertTriangle
 } from 'lucide-react'
 import { toast } from 'sonner'
 import PasteDataModal from '@/components/modals/PasteDataModal'
@@ -38,6 +34,7 @@ interface MediaItem {
   diferenca_caixas: number
   media_real: number
   separation_id: string
+  status?: string
 }
 
 interface SeparationInfo {
@@ -52,6 +49,7 @@ export default function MediaSistemaTab() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
   
   // Estados dos modais
   const [showPasteDataModal, setShowPasteDataModal] = useState(false)
@@ -82,8 +80,8 @@ export default function MediaSistemaTab() {
       setMediaData(result.data || [])
       setSeparationInfo(result.separationInfo || null)
       
-      if (result.data.length === 0) {
-        toast.info(result.message || 'Nenhum item encontrado')
+      if (result.message) {
+        toast.info(result.message)
       }
     } catch (error) {
       console.error('Erro ao buscar dados da média:', error)
@@ -100,95 +98,177 @@ export default function MediaSistemaTab() {
     toast.success('Dados atualizados com sucesso!')
   }
 
-  // Função para adicionar itens via API
-  const handleAddItems = async (items: any[]) => {
+  // components/tabs/MediaSistemaTab.tsx - handleAddItems corrigido
+const handleAddItems = async (items: any[]) => {
+  try {
+    const token = localStorage.getItem('colhetron_token')
+    if (!token) {
+      throw new Error('Token de autorização não encontrado')
+    }
+
+    // CORREÇÃO: Mapear corretamente os nomes das propriedades
+    const processedItems = items.map(item => {
+      // Calcular média do sistema
+      const quantidadeKg = Number(item.quantidadeKg || item.quantidade_kg || 0)
+      const quantidadeCaixas = Number(item.quantidadeCaixas || item.quantidade_caixas || 0)
+      const mediaSistema = quantidadeCaixas > 0 ? quantidadeKg / quantidadeCaixas : 0
+
+      return {
+        codigo: String(item.codigo || '').trim(),
+        material: String(item.material || '').trim(),
+        quantidade_kg: quantidadeKg,  // Nome correto para a API
+        quantidade_caixas: quantidadeCaixas,  // Nome correto para a API
+        media_sistema: Number(mediaSistema.toFixed(2))
+      }
+    })
+
+    console.log('Dados processados para API:', processedItems)
+
+    const response = await fetch('/api/media-analysis/bulk-add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ items: processedItems }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      console.error('Erro da API:', errorData)
+      throw new Error(errorData.error || 'Falha ao adicionar itens')
+    }
+
+    const result = await response.json()
+    toast.success(result.message)
+    await fetchMediaData()
+    
+    return { success: true }
+  } catch (error) {
+    console.error('Erro ao adicionar itens:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Erro desconhecido' 
+    }
+  }
+}
+
+  const handleClearData = async () => {
+    // Confirmação dupla para evitar exclusões acidentais
+    const confirmed = window.confirm(
+      '⚠️ ATENÇÃO: Tem certeza que deseja limpar todos os dados da análise de médias?\n\n' +
+      'Esta ação irá:\n' +
+      '• Remover todos os itens carregados\n' +
+      '• Permitir fazer novos uploads\n' +
+      '• NÃO pode ser desfeita\n\n' +
+      'Clique em OK para confirmar a limpeza.'
+    )
+
+    if (!confirmed) return
+
     try {
+      setIsClearing(true)
       const token = localStorage.getItem('colhetron_token')
       if (!token) {
-        throw new Error('Token não encontrado')
+        throw new Error('Token de autorização não encontrado')
       }
 
-      const response = await fetch('/api/media-analysis/bulk-add', {
-        method: 'POST',
+      const response = await fetch('/api/media-analysis/clear', {
+        method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ items })
       })
 
-      const result = await response.json()
-
-      if (response.ok) {
-        return { success: true }
-      } else {
-        return { success: false, error: result.error || 'Erro ao adicionar itens' }
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Falha ao limpar dados')
       }
+
+      const result = await response.json()
+      
+      // Limpar estado local
+      setMediaData([])
+      setSearchTerm('')
+      
+      toast.success('✅ ' + result.message + ' Você pode fazer novos uploads agora.')
+      
     } catch (error) {
-      console.error('Erro ao adicionar itens:', error)
-      return { success: false, error: 'Erro de conexão' }
+      console.error('Erro ao limpar dados:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao limpar dados')
+    } finally {
+      setIsClearing(false)
     }
   }
 
   const handlePasteDataSuccess = (count: number) => {
     toast.success(`${count} itens adicionados com sucesso!`)
-    fetchMediaData() // Recarregar dados
+    fetchMediaData()
   }
 
-  const handleAddItemSuccess = () => {
-    toast.success('Item adicionado com sucesso!')
-    fetchMediaData() // Recarregar dados
-  }
+  // Verificar se pode adicionar itens (tem separação ativa)
+  const canAddItems = separationInfo?.isActive || false
 
-  // CORREÇÃO: Verificar se há separação (ativa ou última) ao invés de apenas separação ativa
-  const canAddItems = separationInfo !== null && separationInfo.id
-
+  // Filtrar dados com base na busca
   const filteredData = mediaData.filter(item =>
     item.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.material.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const getStatusColor = (diferenca: number, quantidadeCaixas: number) => {
-    const percentual = Math.abs(diferenca) / quantidadeCaixas * 100
-    if (percentual <= 5) return 'bg-green-500/20 text-green-400 border-green-500/30'
-    if (percentual <= 15) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-    return 'bg-red-500/20 text-red-400 border-red-500/30'
+  const getStatusColor = (diferenca: number, quantidade: number) => {
+    if (quantidade === 0) return 'bg-red-500/20 text-red-400 border-red-400/30'
+    const percentual = Math.abs(diferenca) / quantidade
+    if (percentual > 0.2) return 'bg-red-500/20 text-red-400 border-red-400/30'
+    if (percentual > 0.1) return 'bg-yellow-500/20 text-yellow-400 border-yellow-400/30'
+    return 'bg-green-500/20 text-green-400 border-green-400/30'
   }
 
-  const getStatusLabel = (diferenca: number, quantidadeCaixas: number) => {
-    const percentual = Math.abs(diferenca) / quantidadeCaixas * 100
-    if (percentual <= 5) return 'OK'
-    if (percentual <= 15) return 'ATENÇÃO'
-    return 'CRÍTICO'
+  const getStatusLabel = (diferenca: number, quantidade: number) => {
+    if (quantidade === 0) return 'CRÍTICO'
+    const percentual = Math.abs(diferenca) / quantidade
+    if (percentual > 0.2) return 'CRÍTICO'
+    if (percentual > 0.1) return 'ATENÇÃO'
+    return 'OK'
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+          className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
+        />
+        <span className="ml-3 text-white">Carregando análise de médias...</span>
+      </div>
+    )
   }
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
       className="space-y-6"
     >
-      {/* Header com Status da Separação */}
+      {/* Header da Análise */}
       <Card className="bg-gray-900/50 border-gray-800">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-white flex items-center">
-              <BarChart3 className="w-6 h-6 mr-2" />
-              Análise de Média do Sistema
-            </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center space-x-4">
+              <CardTitle className="text-xl font-bold text-white flex items-center">
+                <Activity className="w-6 h-6 mr-2 text-blue-400" />
+                Análise de Médias do Sistema
+              </CardTitle>
               {separationInfo && (
-                <Badge 
-                  className={`${
-                    separationInfo.isActive 
-                      ? 'bg-green-500/20 text-green-400 border-green-500/30' 
-                      : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                  }`}
-                >
+                <Badge className={separationInfo.isActive ? 
+                  'bg-green-500/20 text-green-400 border-green-400/30' : 
+                  'bg-yellow-500/20 text-yellow-400 border-yellow-400/30'
+                }>
                   {separationInfo.isActive ? 'Separação Ativa' : 'Última Separação'}
                 </Badge>
               )}
+            </div>
+            <div className="flex items-center space-x-2">
               <Button
                 onClick={handleRefresh}
                 disabled={isRefreshing}
@@ -198,19 +278,60 @@ export default function MediaSistemaTab() {
               >
                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               </Button>
+              {/* BOTÃO DE LIMPEZA */}
+              {mediaData.length > 0 && (
+                <Button
+                  onClick={handleClearData}
+                  disabled={isClearing}
+                  size="sm"
+                  variant="outline"
+                  className="border-red-700 text-red-400 hover:bg-red-900/20 hover:border-red-600"
+                >
+                  {isClearing ? (
+                    <>
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                        className="w-4 h-4 mr-1"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                      </motion.div>
+                      Limpando...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Limpar Dados
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-400">
-              {mediaData.length} itens carregados para análise
-              {separationInfo && !separationInfo.isActive && (
-                <span className="ml-2 text-yellow-400">
-                  (Baseado na última separação)
-                </span>
+              {mediaData.length > 0 ? (
+                <>
+                  {mediaData.length} itens carregados para análise
+                  {separationInfo && !separationInfo.isActive && (
+                    <span className="ml-2 text-yellow-400">
+                      (Baseado na última separação)
+                    </span>
+                  )}
+                </>
+              ) : (
+                'Nenhum item carregado. Use os botões abaixo para adicionar dados à análise.'
               )}
             </div>
+            {/* Indicador visual de que há dados para limpar */}
+            {mediaData.length > 0 && (
+              <div className="text-xs text-gray-500 flex items-center">
+                <AlertTriangle className="w-3 h-3 mr-1" />
+                Use "Limpar Dados" para fazer novos uploads
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -227,6 +348,7 @@ export default function MediaSistemaTab() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 bg-gray-800 border-gray-700 text-white"
+                  disabled={mediaData.length === 0}
                 />
               </div>
             </div>
@@ -252,13 +374,14 @@ export default function MediaSistemaTab() {
             </div>
           </div>
 
-          {/* CORREÇÃO: Mensagem informativa quando botões estão desabilitados */}
+          {/* Mensagem informativa quando botões estão desabilitados */}
           {!canAddItems && (
             <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
               <div className="flex items-center text-yellow-400 text-sm">
                 <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
                 <span>
-                  Para adicionar itens, é necessário ter uma separação ativa ou dados de separação disponíveis.
+                  Para adicionar itens, é necessário ter uma separação ativa. 
+                  {!separationInfo && ' Crie uma separação primeiro.'}
                 </span>
               </div>
             </div>
@@ -271,54 +394,21 @@ export default function MediaSistemaTab() {
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-800/50">
-                <tr>
-                  <th className="text-left p-4 text-gray-300 font-medium">Código</th>
-                  <th className="text-left p-4 text-gray-300 font-medium">Material</th>
-                  <th className="text-right p-4 text-gray-300 font-medium">Qtd (kg)</th>
-                  <th className="text-right p-4 text-gray-300 font-medium">Caixas</th>
-                  <th className="text-right p-4 text-gray-300 font-medium">Média Sistema</th>
-                  <th className="text-right p-4 text-gray-300 font-medium">Estoque Atual</th>
-                  <th className="text-right p-4 text-gray-300 font-medium">Diferença</th>
-                  <th className="text-right p-4 text-gray-300 font-medium">Média Real</th>
-                  <th className="text-center p-4 text-gray-300 font-medium">Status</th>
+              <thead className="border-b border-gray-800">
+                <tr className="text-left">
+                  <th className="p-4 text-gray-300 font-medium">Código</th>
+                  <th className="p-4 text-gray-300 font-medium">Material</th>
+                  <th className="p-4 text-gray-300 font-medium text-right">Qtd KG</th>
+                  <th className="p-4 text-gray-300 font-medium text-right">Qtd Caixas</th>
+                  <th className="p-4 text-gray-300 font-medium text-right">Média Sistema</th>
+                  <th className="p-4 text-gray-300 font-medium text-right">Estoque Atual</th>
+                  <th className="p-4 text-gray-300 font-medium text-right">Diferença</th>
+                  <th className="p-4 text-gray-300 font-medium text-right">Média Real</th>
+                  <th className="p-4 text-gray-300 font-medium text-center">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {isLoading ? (
-                  // Loading skeleton
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <tr key={index} className="border-t border-gray-800">
-                      <td className="p-4">
-                        <div className="h-4 bg-gray-700 rounded animate-pulse"></div>
-                      </td>
-                      <td className="p-4">
-                        <div className="h-4 bg-gray-700 rounded animate-pulse"></div>
-                      </td>
-                      <td className="p-4">
-                        <div className="h-4 bg-gray-700 rounded animate-pulse"></div>
-                      </td>
-                      <td className="p-4">
-                        <div className="h-4 bg-gray-700 rounded animate-pulse"></div>
-                      </td>
-                      <td className="p-4">
-                        <div className="h-4 bg-gray-700 rounded animate-pulse"></div>
-                      </td>
-                      <td className="p-4">
-                        <div className="h-4 bg-gray-700 rounded animate-pulse"></div>
-                      </td>
-                      <td className="p-4">
-                        <div className="h-4 bg-gray-700 rounded animate-pulse"></div>
-                      </td>
-                      <td className="p-4">
-                        <div className="h-4 bg-gray-700 rounded animate-pulse"></div>
-                      </td>
-                      <td className="p-4">
-                        <div className="h-4 bg-gray-700 rounded animate-pulse"></div>
-                      </td>
-                    </tr>
-                  ))
-                ) : filteredData.length === 0 ? (
+                {filteredData.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="p-8 text-center text-gray-400">
                       <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -326,7 +416,9 @@ export default function MediaSistemaTab() {
                       <p className="text-sm">
                         {searchTerm 
                           ? 'Tente ajustar sua busca ou limpar o filtro'
-                          : 'Carregue dados de uma separação para visualizar as médias'
+                          : mediaData.length === 0
+                            ? 'Use "Colar Dados" ou "Adicionar Item" para começar a análise'
+                            : 'Todos os itens foram filtrados pela busca'
                         }
                       </p>
                     </td>
