@@ -1,3 +1,4 @@
+// app/api/auth/register/route.ts - Correção na URL padrão
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { hashPassword, generateToken } from '@/lib/auth'
@@ -10,11 +11,13 @@ const registerSchema = z.object({
   role: z.string().optional().default('user')
 })
 
+// URL padrão do avatar
+const SUPABASE_STORAGE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const DEFAULT_AVATAR_URL = `${SUPABASE_STORAGE_URL}/storage/v1/object/public/colhetron-assets/avatar/default.png`
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    
-    // Validar dados de entrada
     const validatedData = registerSchema.parse(body)
     const { email, password, name, role } = validatedData
 
@@ -38,14 +41,12 @@ export async function POST(request: NextRequest) {
     // Criar usuário
     const { data: user, error } = await supabaseAdmin
       .from('colhetron_user')
-      .insert([
-        {
-          email,
-          password: hashedPassword,
-          name,
-          role
-        }
-      ])
+      .insert([{
+        email,
+        password: hashedPassword,
+        name,
+        role
+      }])
       .select('id, email, name, role, created_at, updated_at')
       .single()
 
@@ -55,6 +56,27 @@ export async function POST(request: NextRequest) {
         { error: 'Erro ao criar usuário' },
         { status: 500 }
       )
+    }
+
+    // Criar perfil base do usuário
+    const defaultProfile = {
+      user_id: user.id,
+      name: name,
+      phone: '',
+      department: 'Logística',
+      position: 'Operador de Separação',
+      bio: 'Novo usuário do sistema Colhetron',
+      location: '',
+      avatar_url: DEFAULT_AVATAR_URL
+    }
+
+    const { error: profileError } = await supabaseAdmin
+      .from('colhetron_user_profiles')
+      .insert([defaultProfile])
+
+    if (profileError) {
+      console.error('Erro ao criar perfil:', profileError)
+      // Não falha o registro se não conseguir criar o perfil
     }
 
     // Gerar token JWT
