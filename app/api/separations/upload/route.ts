@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logActivity } from '@/lib/activity-logger'
 import * as XLSX from 'xlsx'
 
 
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+
 
     const token = authHeader.split(' ')[1]
     const decoded = verifyToken(token)
@@ -122,6 +124,8 @@ export async function POST(request: NextRequest) {
       separation: separationResult.data
     })
 
+    
+
   } catch (error) {
     console.error('Erro no upload:', error)
     return NextResponse.json(
@@ -129,6 +133,8 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  
 }
 
 async function processExcelFile(buffer: Uint8Array): Promise<ProcessedData> {
@@ -306,4 +312,6 @@ async function createSeparation(params: {
     console.error('Erro na criação da separação:', error)
     return { data: null, error: error instanceof Error ? error.message : 'Erro desconhecido' }
   }
+
+  
 }
