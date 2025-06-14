@@ -1,225 +1,335 @@
-"use client"
+// components/tabs/FaturamentoTab.tsx
+import React, { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Loader2, AlertTriangle, Download, CheckCircle, XCircle } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
+import { toast } from 'sonner'
 
-import { useState } from "react"
-import { motion } from "framer-motion"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Search, ChevronDown } from "lucide-react"
+interface MediaAnalysisStatus {
+  totalItems: number
+  itemsWithError: number
+  errorItems: {
+    id: string
+    codigo: string
+    material: string
+    status: string
+    error: string
+  }[]
+}
 
-const mockFaturamento = [
-  {
-    id: 1,
-    codLojaSap: "F001",
-    codProduto: "100000",
-    quantVolumes: 3,
-  },
-  {
-    id: 2,
-    codLojaSap: "F001",
-    codProduto: "100048",
-    quantVolumes: 3,
-  },
-  {
-    id: 3,
-    codLojaSap: "F001",
-    codProduto: "100061",
-    quantVolumes: 2,
-  },
-  {
-    id: 4,
-    codLojaSap: "F001",
-    codProduto: "100068",
-    quantVolumes: 2,
-  },
-  {
-    id: 5,
-    codLojaSap: "F001",
-    codProduto: "100070",
-    quantVolumes: 2,
-  },
-  {
-    id: 6,
-    codLojaSap: "F001",
-    codProduto: "100074",
-    quantVolumes: 1,
-  },
-  {
-    id: 7,
-    codLojaSap: "F001",
-    codProduto: "100160",
-    quantVolumes: 4,
-  },
-  {
-    id: 8,
-    codLojaSap: "F001",
-    codProduto: "100161",
-    quantVolumes: 6,
-  },
-  {
-    id: 9,
-    codLojaSap: "F001",
-    codProduto: "100162",
-    quantVolumes: 3,
-  },
-  {
-    id: 10,
-    codLojaSap: "F001",
-    codProduto: "100171",
-    quantVolumes: 5,
-  },
-]
+interface FaturamentoItem {
+  loja: string
+  centro: string
+  material: string
+  quantidade: number
+}
 
-export default function FaturamentoTab() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filtroLoja, setFiltroLoja] = useState("Todas")
-  const [filteredData, setFilteredData] = useState(mockFaturamento)
+export function FaturamentoTab() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false)
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [mediaStatus, setMediaStatus] = useState<MediaAnalysisStatus | null>(null)
+  const [faturamentoData, setFaturamentoData] = useState<FaturamentoItem[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const { user } = useAuth()
 
-  const handleSearch = (term: string) => {
-    setSearchTerm(term)
-    applyFilters(term, filtroLoja)
-  }
+  const itemsPerPage = 10
 
-  const handleLojaFilter = (loja: string) => {
-    setFiltroLoja(loja)
-    applyFilters(searchTerm, loja)
-  }
+  // Verificar status da tabela de médias
+  const checkMediaAnalysisStatus = async () => {
+    setIsLoading(true)
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) throw new Error('Token não encontrado')
 
-  const applyFilters = (search: string, loja: string) => {
-    let filtered = mockFaturamento
+      const response = await fetch('/api/faturamento/check-media-status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
 
-    if (search) {
-      filtered = filtered.filter(
-        (item) => item.codProduto.includes(search) || item.codLojaSap.toLowerCase().includes(search.toLowerCase()),
-      )
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Erro ao verificar status das médias')
+      }
+
+      const data = await response.json()
+      setMediaStatus(data)
+
+      if (data.itemsWithError > 0 && data.itemsWithError <= 10) {
+        setShowErrorModal(true)
+      } else if (data.itemsWithError > 10) {
+        setShowErrorModal(true)
+      } else {
+        // Todos os itens estão OK, gerar tabela de faturamento
+        await generateFaturamentoTable()
+      }
+    } catch (error) {
+      console.error('Erro ao verificar status:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro desconhecido')
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    if (loja !== "Todas") {
-      filtered = filtered.filter((item) => item.codLojaSap === loja)
+  // Gerar tabela de faturamento
+  const generateFaturamentoTable = async () => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) throw new Error('Token não encontrado')
+
+      const response = await fetch('/api/faturamento/generate-table', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Erro ao gerar tabela de faturamento')
+      }
+
+      const data = await response.json()
+      setFaturamentoData(data.items)
+      toast.success('Tabela de faturamento gerada com sucesso!')
+    } catch (error) {
+      console.error('Erro ao gerar tabela:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao gerar tabela')
     }
-
-    setFilteredData(filtered)
   }
 
-  const generateTemplate = () => {
-    // Simulação de geração de template
-    const csvContent = [
-      "COD_LOJA_SAP,COD_PRODUTO,Quant. Volumes",
-      ...filteredData.map((item) => `${item.codLojaSap},${item.codProduto},${item.quantVolumes}`),
-    ].join("\n")
+  // Gerar template Excel
+  const generateExcelTemplate = async () => {
+    setIsGeneratingTemplate(true)
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) throw new Error('Token não encontrado')
 
-    const blob = new Blob([csvContent], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `faturamento_template_${new Date().toISOString().split("T")[0]}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+      const response = await fetch('/api/faturamento/generate-excel', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Erro ao gerar template Excel')
+      }
+
+      // Download do arquivo
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `faturamento_${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success('Template Excel gerado e baixado com sucesso!')
+    } catch (error) {
+      console.error('Erro ao gerar Excel:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao gerar template')
+    } finally {
+      setIsGeneratingTemplate(false)
+    }
   }
 
-  const totalVolumes = filteredData.reduce((sum, item) => sum + item.quantVolumes, 0)
+  const paginatedErrorItems = mediaStatus?.errorItems.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  ) || []
+
+  const totalPages = Math.ceil((mediaStatus?.errorItems.length || 0) / itemsPerPage)
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-4"
-    >
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold apple-font text-white">Faturamento</h2>
-          <p className="text-gray-400">Gestão de faturamento e geração de templates</p>
-        </div>
+      <Card className="bg-gray-900/50 border-gray-800">
+        <CardHeader>
+          <CardTitle className="text-white apple-font flex items-center">
+            <Download className="w-5 h-5 mr-2" />
+            Faturamento
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-4">
+            <Button
+              onClick={checkMediaAnalysisStatus}
+              disabled={isLoading}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Analisando...
+                </>
+              ) : (
+                'Analisar e Gerar Tabela'
+              )}
+            </Button>
 
-        <div className="flex gap-4 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-80">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-            <Input
-              placeholder="Buscar por código..."
-              value={searchTerm}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="pl-10 bg-gray-800/50 border-gray-700 text-white placeholder-gray-400 h-10"
-            />
+            {faturamentoData.length > 0 && (
+              <Button
+                onClick={generateExcelTemplate}
+                disabled={isGeneratingTemplate}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                {isGeneratingTemplate ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Gerando Template...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Gerar Template Excel
+                  </>
+                )}
+              </Button>
+            )}
           </div>
+        </CardContent>
+      </Card>
 
-          <Select value={filtroLoja} onValueChange={handleLojaFilter}>
-            <SelectTrigger className="w-32 bg-gray-800/50 border-gray-700 text-white h-10">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700">
-              <SelectItem value="Todas">Todas</SelectItem>
-              <SelectItem value="F001">F001</SelectItem>
-              <SelectItem value="F002">F002</SelectItem>
-              <SelectItem value="F003">F003</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Seção Aba Calc e Botão */}
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <div className="bg-green-200 px-4 py-2 rounded">
-            <span className="text-gray-800 font-semibold text-sm">Aba Calc {">>>"}</span>
-            <div className="text-gray-800 font-bold text-lg">{totalVolumes.toLocaleString()}</div>
-            <div className="text-gray-600 text-sm">{totalVolumes.toLocaleString()}</div>
-          </div>
-        </div>
-
-        <Button
-          onClick={generateTemplate}
-          className="bg-black hover:bg-gray-800 text-white font-bold px-6 py-3 text-sm"
-        >
-          GERAR TEMPLATE
-        </Button>
-      </div>
-
-      {/* Tabela */}
-      <div className="bg-white border border-gray-300 rounded">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-gray-300 bg-gray-100">
-                <TableHead className="text-gray-800 font-semibold text-xs border-r border-gray-300 w-32">
-                  <div className="flex items-center justify-between">
-                    COD_LOJA_SAP
-                    <ChevronDown className="w-4 h-4 text-gray-500" />
-                  </div>
-                </TableHead>
-                <TableHead className="text-gray-800 font-semibold text-xs border-r border-gray-300 w-32">
-                  <div className="flex items-center justify-between">
-                    COD_PRODUTO
-                    <ChevronDown className="w-4 h-4 text-gray-500" />
-                  </div>
-                </TableHead>
-                <TableHead className="text-gray-800 font-semibold text-xs text-center w-32">Quant. Volumes</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredData.map((item, index) => (
-                <TableRow key={item.id} className="border-gray-300 hover:bg-gray-50 transition-colors">
-                  <TableCell className="text-gray-800 text-xs border-r border-gray-300 font-medium">
-                    {item.codLojaSap}
-                  </TableCell>
-                  <TableCell className="text-gray-800 text-xs border-r border-gray-300">{item.codProduto}</TableCell>
-                  <TableCell className="text-center text-xs">
-                    <span className="text-gray-800 font-semibold">{item.quantVolumes}</span>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-
-      {filteredData.length === 0 && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12">
-          <p className="text-gray-400 text-lg">Nenhum item encontrado para faturamento</p>
-        </motion.div>
+      {/* Tabela de Faturamento */}
+      {faturamentoData.length > 0 && (
+        <Card className="bg-gray-900/50 border-gray-800">
+          <CardHeader>
+            <CardTitle className="text-white apple-font">
+              Dados para Faturamento ({faturamentoData.length} itens)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-gray-700 bg-gray-800/50">
+                    <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
+                      COD_LOJA_SAP
+                    </TableHead>
+                    <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
+                      COD_PRODUTO
+                    </TableHead>
+                    <TableHead className="text-gray-300 font-bold text-center">
+                      Quant. Volumes
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {faturamentoData.map((item, index) => (
+                    <TableRow key={index} className="border-gray-700 hover:bg-gray-700/50">
+                      <TableCell className="text-gray-300 text-center border-r border-gray-700">
+                        {item.centro}
+                      </TableCell>
+                      <TableCell className="text-gray-300 text-center border-r border-gray-700">
+                        {item.material}
+                      </TableCell>
+                      <TableCell className="text-gray-300 text-center">
+                        {item.quantidade}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
-    </motion.div>
+
+      {/* Modal de Erros */}
+      <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
+        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-red-400">
+              <XCircle className="w-5 h-5 mr-2" />
+              Itens com Status Incorreto ({mediaStatus?.itemsWithError} de {mediaStatus?.totalItems})
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <p className="text-gray-300">
+              Os seguintes itens não estão com status "OK" na análise de médias. 
+              Por favor, ajuste-os antes de continuar:
+            </p>
+
+            <ScrollArea className="h-96 border border-gray-700 rounded">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-gray-700">
+                    <TableHead className="text-gray-300">Código</TableHead>
+                    <TableHead className="text-gray-300">Material</TableHead>
+                    <TableHead className="text-gray-300">Status</TableHead>
+                    <TableHead className="text-gray-300">Erro</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedErrorItems.map((item) => (
+                    <TableRow key={item.id} className="border-gray-700">
+                      <TableCell className="text-gray-300">{item.codigo}</TableCell>
+                      <TableCell className="text-gray-300">{item.material}</TableCell>
+                      <TableCell>
+                        <Badge variant={item.status === 'CRÍTICO' ? 'destructive' : 'secondary'}>
+                          {item.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-gray-300">{item.error}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+
+            {/* Paginação */}
+            {totalPages > 1 && (
+              <div className="flex justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="border-gray-600 text-gray-300"
+                >
+                  Anterior
+                </Button>
+                <span className="px-3 py-1 text-gray-300">
+                  {currentPage} de {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="border-gray-600 text-gray-300"
+                >
+                  Próximo
+                </Button>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowErrorModal(false)}
+                className="border-gray-600 text-gray-300"
+              >
+                Fechar
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowErrorModal(false)
+                  // Redirecionar para a tab de análise de médias
+                  toast.info('Acesse a aba "Análise de Médias" para corrigir os itens')
+                }}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                Ir para Análise de Médias
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }

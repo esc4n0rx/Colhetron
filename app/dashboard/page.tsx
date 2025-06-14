@@ -12,7 +12,7 @@ import PedidosTab from "@/components/tabs/PedidosTab"
 import PreSeparacaoTab from "@/components/tabs/PreSeparacaoTab"
 import SeparacaoTab from "@/components/tabs/SeparacaoTab"
 import MediaSistemaTab from "@/components/tabs/MediaSistemaTab"
-import FaturamentoTab from "@/components/tabs/FaturamentoTab"
+import { FaturamentoTab } from '@/components/tabs/FaturamentoTab'
 import CadastroTab from "@/components/tabs/CadastroTab"
 import NewSeparationModal from "@/components/NewSeparationModal"
 import ConfiguracoesPage from "@/components/pages/ConfiguracoesPage"

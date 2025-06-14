@@ -35,8 +35,7 @@ export async function GET(request: NextRequest) {
       (mediaAnalysis || []).map(async (item) => {
         const estoqueAtual = await calculateEstoqueAtual(decoded.userId, item.codigo)
         
-        // Recalcular diferença em caixas e média real
-        const diferencaCaixas = estoqueAtual - item.quantidade_caixas
+        const diferencaCaixas = item.quantidade_caixas - estoqueAtual
         const mediaReal = estoqueAtual > 0 ? (item.quantidade_kg / estoqueAtual) : 0
         
         // Recalcular status
@@ -81,7 +80,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Função para calcular estoque atual baseado nas separações (CORRIGIDA)
+// Função para calcular estoque atual baseado nas separações 
 async function calculateEstoqueAtual(userId: string, codigo: string): Promise<number> {
   try {
     // 1. Buscar separação ativa do usuário

@@ -8,6 +8,7 @@ export interface LojaItem {
   nome: string
   tipo: 'CD' | 'Loja Padrão' | 'Administrativo'
   uf: string
+  centro: string // Nova propriedade
   zonaSeco: string
   subzonaSeco: string
   zonaFrio: string
@@ -80,7 +81,7 @@ export function useCadastroData() {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
 
-      const response = await fetch('/api/cadastro/lojas', {
+      const response = await fetch(`/api/cadastro/lojas/${loja.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -99,37 +100,6 @@ export function useCadastroData() {
 
     } catch (error) {
       console.error('Erro ao atualizar loja:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido' 
-      }
-    }
-  }
-
-  const updateMaterial = async (material: Partial<MaterialItem> & { id: string }) => {
-    try {
-      const token = localStorage.getItem('colhetron_token')
-      if (!token) throw new Error('Token não encontrado')
-
-      const response = await fetch('/api/cadastro/materiais', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(material)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro ao atualizar material')
-      }
-
-      setMateriais(prev => prev.map(m => m.id === material.id ? { ...m, ...material } : m))
-      return { success: true }
-
-    } catch (error) {
-      console.error('Erro ao atualizar material:', error)
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Erro desconhecido' 
@@ -162,6 +132,37 @@ export function useCadastroData() {
 
     } catch (error) {
       console.error('Erro ao criar loja:', error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Erro desconhecido' 
+      }
+    }
+  }
+
+  const updateMaterial = async (material: Partial<MaterialItem> & { id: string }) => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) throw new Error('Token não encontrado')
+
+      const response = await fetch(`/api/cadastro/materiais/${material.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(material)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erro ao atualizar material')
+      }
+
+      setMateriais(prev => prev.map(m => m.id === material.id ? { ...m, ...material } : m))
+      return { success: true }
+
+    } catch (error) {
+      console.error('Erro ao atualizar material:', error)
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Erro desconhecido' 

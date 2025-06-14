@@ -1,9 +1,8 @@
-
+// app/api/cadastro/lojas/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
-
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,7 +16,6 @@ export async function POST(request: NextRequest) {
 
     const token = authHeader.split(' ')[1]
     const decoded = verifyToken(token)
-    
     if (!decoded) {
       return NextResponse.json(
         { error: 'Token inválido' },
@@ -30,36 +28,26 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json(
-        { error: 'Arquivo é obrigatório' },
+        { error: 'Nenhum arquivo enviado' },
         { status: 400 }
       )
     }
 
-    if (!file.name.endsWith('.xlsx')) {
+    // Verificar se é arquivo Excel
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
       return NextResponse.json(
-        { error: 'Apenas arquivos .xlsx são aceitos' },
+        { error: 'Formato de arquivo inválido. Use arquivos Excel (.xlsx ou .xls)' },
         { status: 400 }
       )
     }
 
     // Processar arquivo Excel
-    const fileBuffer = await file.arrayBuffer()
-    const uint8Array = new Uint8Array(fileBuffer)
-    
-    let processedLojas: any[]
-    try {
-      processedLojas = await processLojasExcel(uint8Array)
-    } catch (error) {
-      console.error('Erro ao processar Excel:', error)
-      return NextResponse.json(
-        { error: 'Erro ao processar arquivo Excel. Verifique o formato.' },
-        { status: 400 }
-      )
-    }
+    const buffer = new Uint8Array(await file.arrayBuffer())
+    const processedLojas = await processLojasExcel(buffer)
 
-    if (processedLojas.length === 0) {
+    if (!processedLojas || processedLojas.length === 0) {
       return NextResponse.json(
-        { error: 'Nenhuma loja encontrada no arquivo' },
+        { error: 'Nenhuma loja encontrada no arquivo. Verifique o formato.' },
         { status: 400 }
       )
     }
@@ -126,12 +114,13 @@ async function processLojasExcel(buffer: Uint8Array): Promise<any[]> {
   const headers = data[0] as string[]
   const rows = data.slice(1) as any[][]
 
-  // Mapear colunas esperadas
+  // Mapear colunas esperadas (incluindo CENTRO)
   const columnMap = {
     'PREFIXO': 'prefixo',
     'NOME': 'nome',
     'Tipo': 'tipo',
     'UF': 'uf',
+    'CENTRO': 'centro', // Nova coluna
     'ZONA SECO': 'zonaSeco',
     'SUBZONA SECO': 'subzonaSeco',
     'ZONA FRIO': 'zonaFrio',
@@ -171,6 +160,7 @@ async function processLojasExcel(buffer: Uint8Array): Promise<any[]> {
       nome,
       tipo: row[headerIndexes.tipo]?.toString()?.trim() || 'CD',
       uf,
+      centro: row[headerIndexes.centro]?.toString()?.trim() || '', // Incluir centro
       zonaSeco: row[headerIndexes.zonaSeco]?.toString()?.trim() || '',
       subzonaSeco: row[headerIndexes.subzonaSeco]?.toString()?.trim() || '',
       zonaFrio: row[headerIndexes.zonaFrio]?.toString()?.trim() || '',
