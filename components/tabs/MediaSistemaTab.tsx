@@ -215,20 +215,21 @@ const handleAddItems = async (items: any[]) => {
     item.material.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const getStatusColor = (diferenca: number, quantidade: number) => {
-    if (quantidade === 0) return 'bg-red-500/20 text-red-400 border-red-400/30'
-    const percentual = Math.abs(diferenca) / quantidade
-    if (percentual > 0.2) return 'bg-red-500/20 text-red-400 border-red-400/30'
-    if (percentual > 0.1) return 'bg-yellow-500/20 text-yellow-400 border-yellow-400/30'
-    return 'bg-green-500/20 text-green-400 border-green-400/30'
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'CRÍTICO':
+        return 'bg-red-500/20 text-red-400 border-red-400/30'
+      case 'ATENÇÃO':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-400/30'
+      case 'OK':
+        return 'bg-green-500/20 text-green-400 border-green-400/30'
+      default:
+        return 'bg-gray-500/20 text-gray-400 border-gray-400/30'
+    }
   }
-
-  const getStatusLabel = (diferenca: number, quantidade: number) => {
-    if (quantidade === 0) return 'CRÍTICO'
-    const percentual = Math.abs(diferenca) / quantidade
-    if (percentual > 0.2) return 'CRÍTICO'
-    if (percentual > 0.1) return 'ATENÇÃO'
-    return 'OK'
+  
+  const getStatusLabel = (status: string) => {
+    return status || 'N/A'
   }
 
   if (isLoading) {
@@ -457,8 +458,8 @@ const handleAddItems = async (items: any[]) => {
                         {item.media_real.toFixed(2)}
                       </td>
                       <td className="p-4 text-center">
-                        <Badge className={getStatusColor(item.diferenca_caixas, item.quantidade_caixas)}>
-                          {getStatusLabel(item.diferenca_caixas, item.quantidade_caixas)}
+                      <Badge className={getStatusColor(item.status || 'OK')}>
+                       {getStatusLabel(item.status || 'OK')}
                         </Badge>
                       </td>
                     </motion.tr>

@@ -1,9 +1,8 @@
+// app/api/media-analysis/item/[id]/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-
-
 
 export async function PUT(
   request: NextRequest,
@@ -46,22 +45,36 @@ export async function PUT(
       // Recalcular média sistema
       processedUpdates.media_sistema = quantidadeCaixas > 0 ? quantidadeKg / quantidadeCaixas : 0
       
-      // Recalcular diferença
-      processedUpdates.diferenca_caixas = existingItem.estoque_atual - quantidadeCaixas
+      // CORRIGIR: Diferença = Qtd Caixas - Estoque Atual
+      processedUpdates.diferenca_caixas = quantidadeCaixas - existingItem.estoque_atual
       
-      // Recalcular média real
-      processedUpdates.media_real = existingItem.estoque_atual > 0 && quantidadeCaixas > 0 ? 
-        (quantidadeKg * existingItem.estoque_atual / quantidadeCaixas) / existingItem.estoque_atual : 0
+      // CORRIGIR: Média Real = Qtd KG / Estoque Atual
+      processedUpdates.media_real = existingItem.estoque_atual > 0 ? 
+        quantidadeKg / existingItem.estoque_atual : 0
       
-      // Recalcular status
-      const diferencaCaixas = processedUpdates.diferenca_caixas
-      if (Math.abs(diferencaCaixas) > quantidadeCaixas * 0.2) {
-        processedUpdates.status = 'CRÍTICO'
-      } else if (Math.abs(diferencaCaixas) > quantidadeCaixas * 0.1) {
-        processedUpdates.status = 'ATENÇÃO'
-      } else {
-        processedUpdates.status = 'OK'
+      // NOVA LÓGICA DE STATUS
+      let status = 'OK'
+      
+      // 1. Se saldo de Qtd Caixa > estoque atual = CRÍTICO
+      if (quantidadeCaixas > existingItem.estoque_atual) {
+        status = 'CRÍTICO'
       }
+      // 2. Se saldo atual = 0 = OK
+      else if (existingItem.estoque_atual === 0) {
+        status = 'OK'
+      }
+      // 3. Verificar se média sistema é inteira
+      else {
+        const mediaSistemaInteira = Number.isInteger(processedUpdates.media_sistema)
+        
+        if (!mediaSistemaInteira) {
+          status = 'ATENÇÃO'
+        } else {
+          status = 'OK'
+        }
+      }
+      
+      processedUpdates.status = status
     }
 
     processedUpdates.updated_at = new Date().toISOString()

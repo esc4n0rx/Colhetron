@@ -1,4 +1,5 @@
-// hooks/useMediaAnalysisData.ts (atualizado)
+// hooks/useMediaAnalysisData.ts
+
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -74,76 +75,133 @@ export function useMediaAnalysisData() {
     }
   }, [user])
 
-  // hooks/useMediaAnalysisData.ts - addItems corrigido
-const addItems = useCallback(async (items: any[]) => {
-  try {
-    const token = localStorage.getItem('colhetron_token')
-    if (!token) {
-      throw new Error('Token de autorização não encontrado')
-    }
-
-    // CORREÇÃO: Mapear corretamente os nomes das propriedades
-    const processedItems = items.map(item => {
-      // Remover zeros à esquerda do código
-      const codigo = String(item.codigo || '').replace(/^0+/, '') || '0'
-      
-      // Mapear propriedades corretamente
-      const quantidadeKg = Number(item.quantidadeKg || item.quantidade_kg || 0)
-      const quantidadeCaixas = Number(item.quantidadeCaixas || item.quantidade_caixas || 0)
-
-      // Calcular média do sistema
-      const mediaSistema = quantidadeCaixas > 0 ? (quantidadeKg / quantidadeCaixas) : 0
-
-      return {
-        codigo,
-        material: String(item.material || ''),
-        quantidade_kg: quantidadeKg,  // Nome correto para a API
-        quantidade_caixas: quantidadeCaixas,  // Nome correto para a API  
-        media_sistema: Number(mediaSistema.toFixed(2))
+  const addItems = useCallback(async (items: any[]) => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) {
+        throw new Error('Token de autorização não encontrado')
       }
-    }).filter(item => 
-      // Filtrar apenas itens válidos
-      item.codigo && item.material && item.codigo.length > 0 && item.material.length > 0
-    )
 
-    if (processedItems.length === 0) {
-      throw new Error('Nenhum item válido encontrado nos dados')
+      // Processar itens conforme nova lógica
+      const processedItems = items.map(item => {
+        // Remover zeros à esquerda do código
+        const codigo = String(item.codigo || '').replace(/^0+/, '') || '0'
+        
+        const quantidadeKg = Number(item.quantidadeKg || item.quantidade_kg || 0)
+        const quantidadeCaixas = Number(item.quantidadeCaixas || item.quantidade_caixas || 0)
+
+        // Calcular média do sistema (mantendo valor original)
+        const mediaSistema = quantidadeCaixas > 0 ? quantidadeKg / quantidadeCaixas : 0
+
+        return {
+          codigo,
+          material: String(item.material || ''),
+          quantidade_kg: quantidadeKg,
+          quantidade_caixas: quantidadeCaixas,
+          media_sistema: mediaSistema
+        }
+      })
+
+      console.log('Enviando itens processados:', processedItems)
+
+      const response = await fetch('/api/media-analysis/bulk-add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ items: processedItems }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Falha ao adicionar itens')
+      }
+
+      const result = await response.json()
+      
+      // Recarregar dados após adicionar
+      await fetchData()
+      
+      return result
+
+    } catch (err) {
+      console.error('Erro ao adicionar itens:', err)
+      throw err
     }
+  }, [fetchData])
 
-    console.log('Enviando itens processados:', processedItems)
+  const updateItem = useCallback(async (id: string, updates: Partial<MediaAnalysisItem>) => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) {
+        throw new Error('Token de autorização não encontrado')
+      }
 
-    const response = await fetch('/api/media-analysis/bulk-add', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ items: processedItems }),
-    })
+      const response = await fetch(`/api/media-analysis/item/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updates),
+      })
 
-    if (!response.ok) {
-      const errorData = await response.json()
-      console.error('Erro da API:', errorData)
-      throw new Error(errorData.error || 'Falha ao adicionar itens')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Falha ao atualizar item')
+      }
+
+      const updatedItem = await response.json()
+      
+      // Atualizar item específico no estado local
+      setData(prevData => 
+        prevData.map(item => 
+          item.id === id ? {
+            ...item,
+            ...updates,
+            updated_at: updatedItem.updated_at
+          } : item
+        )
+      )
+      
+      return updatedItem
+
+    } catch (err) {
+      console.error('Erro ao atualizar item:', err)
+      throw err
     }
+  }, [])
 
-    const result = await response.json()
-    console.log('Resposta da API:', result)
+  const deleteItem = useCallback(async (id: string) => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) {
+        throw new Error('Token de autorização não encontrado')
+      }
 
-    // Recarregar dados após adicionar
-    await fetchData()
-    
-    return { success: true }
-  } catch (err) {
-    console.error('Erro ao adicionar itens:', err)
-    return { 
-      success: false, 
-      error: err instanceof Error ? err.message : 'Erro desconhecido' 
+      const response = await fetch(`/api/media-analysis/item/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Falha ao deletar item')
+      }
+
+      // Remover item do estado local
+      setData(prevData => prevData.filter(item => item.id !== id))
+
+    } catch (err) {
+      console.error('Erro ao deletar item:', err)
+      throw err
     }
-  }
-}, [fetchData])
+  }, [])
 
-  const clearAll = useCallback(async () => {
+  const clearAllData = useCallback(async () => {
     try {
       const token = localStorage.getItem('colhetron_token')
       if (!token) {
@@ -151,7 +209,7 @@ const addItems = useCallback(async (items: any[]) => {
       }
 
       const response = await fetch('/api/media-analysis/clear', {
-        method: 'DELETE',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -163,13 +221,10 @@ const addItems = useCallback(async (items: any[]) => {
       }
 
       setData([])
-      return { success: true }
+
     } catch (err) {
       console.error('Erro ao limpar dados:', err)
-      return { 
-        success: false, 
-        error: err instanceof Error ? err.message : 'Erro desconhecido' 
-      }
+      throw err
     }
   }, [])
 
@@ -181,8 +236,10 @@ const addItems = useCallback(async (items: any[]) => {
     data,
     isLoading,
     error,
+    fetchData,
     addItems,
-    clearAll,
-    refetch: fetchData
+    updateItem,
+    deleteItem,
+    clearAllData,
   }
 }

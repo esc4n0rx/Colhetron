@@ -1,3 +1,4 @@
+// app/api/media-analysis/bulk-add/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
@@ -45,44 +46,53 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     console.log('Dados recebidos na API:', JSON.stringify(body, null, 2))
 
-    // Como os dados já vêm processados do frontend, validar diretamente
     const validatedData = bulkAddSchema.parse(body)
 
-    // Verificar códigos duplicados existentes
+    // Para itens existentes: remover e recalcular
     const codigos = validatedData.items.map(item => item.codigo)
-    const { data: existingItems } = await supabaseAdmin
+    const { error: deleteError } = await supabaseAdmin
       .from('colhetron_media_analysis')
-      .select('codigo')
+      .delete()
       .eq('user_id', decoded.userId)
       .in('codigo', codigos)
 
-    if (existingItems && existingItems.length > 0) {
-      const duplicateCodes = existingItems.map(item => item.codigo)
-      return NextResponse.json(
-        { error: `Os seguintes códigos já existem: ${duplicateCodes.join(', ')}` },
-        { status: 409 }
-      )
+    if (deleteError) {
+      console.error('Erro ao remover itens existentes:', deleteError)
     }
 
-    // Processar cada item e calcular valores com base na separação ativa
+    // Processar cada item com a lógica corrigida
     const itemsToInsert = await Promise.all(
       validatedData.items.map(async (item) => {
         // Calcular estoque atual baseado na separação ativa
         const estoqueAtual = await calculateEstoqueAtual(decoded.userId, item.codigo, activeSeparation.id)
         
-        // Calcular diferença e média real
-        const diferencaCaixas =  item.quantidade_caixas - estoqueAtual 
-        const mediaReal = estoqueAtual > 0 && item.quantidade_kg > 0 ? 
-          item.quantidade_kg / estoqueAtual : 0
+        // CORRIGIR: Diferença = Qtd Caixas - Estoque Atual (não o contrário)
+        const diferencaCaixas = item.quantidade_caixas - estoqueAtual
         
-        // Determinar status baseado na diferença
+        // CORRIGIR: Média Real = Qtd KG / Estoque Atual (se estoque > 0)
+        const mediaReal = estoqueAtual > 0 ? item.quantidade_kg / estoqueAtual : 0
+        
+        // NOVA LÓGICA DE STATUS conforme especificação
         let status = 'OK'
-        if (estoqueAtual === 0) {
+        
+        // 1. Se saldo de Qtd Caixa > estoque atual = CRÍTICO (faltando)
+        if (item.quantidade_caixas > estoqueAtual) {
           status = 'CRÍTICO'
-        } else if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.2) {
-          status = 'CRÍTICO'
-        } else if (Math.abs(diferencaCaixas) > item.quantidade_caixas * 0.1) {
-          status = 'ATENÇÃO'
+        }
+        // 2. Se saldo atual = 0 = OK (não tem distribuição)
+        else if (estoqueAtual === 0) {
+          status = 'OK'
+        }
+        // 3. Se estoque suficiente, verificar se média sistema é inteira
+        else {
+          // Verificar se média sistema é número inteiro
+          const mediaSistemaInteira = Number.isInteger(item.media_sistema)
+          
+          if (!mediaSistemaInteira) {
+            status = 'ATENÇÃO'
+          } else {
+            status = 'OK'
+          }
         }
 
         return {
@@ -90,7 +100,7 @@ export async function POST(request: NextRequest) {
           material: item.material,
           quantidade_kg: item.quantidade_kg,
           quantidade_caixas: item.quantidade_caixas,
-          media_sistema: Number(item.media_sistema.toFixed(2)),
+          media_sistema: item.media_sistema, // Manter valor original sem arredondamento forçado
           estoque_atual: estoqueAtual,
           diferenca_caixas: diferencaCaixas,
           media_real: Number(mediaReal.toFixed(2)),
@@ -122,7 +132,7 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json({ 
-      message: `${insertedItems.length} itens adicionados com sucesso`,
+      message: `${insertedItems.length} itens adicionados/atualizados com sucesso`,
       data: insertedItems
     })
 
