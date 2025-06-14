@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logActivity } from '@/lib/activity-logger'
 import { z } from 'zod'
 
 
@@ -97,6 +98,13 @@ export async function POST(request: NextRequest) {
       console.error('Erro ao inserir itens:', error)
       return NextResponse.json({ error: 'Erro ao inserir itens' }, { status: 500 })
     }
+
+    await logActivity({
+      userId: decoded.userId,
+      action: 'Análise de médias realizada',
+      details: `Análise executada com sucesso itens processados`,
+      type: 'media_analysis',
+    })
 
     return NextResponse.json({ 
       message: `${insertedItems.length} itens adicionados com sucesso`,

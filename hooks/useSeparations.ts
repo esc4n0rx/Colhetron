@@ -216,6 +216,7 @@ export function useSeparations() {
     createSeparation,
     deleteSeparation,
     fetchAllSeparations,
+    fetchActiveSeparation,
     refreshActiveSeparation: fetchActiveSeparation
   }
 }

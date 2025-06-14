@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logActivity } from '@/lib/activity-logger'
 import { z } from 'zod'
 
 const updateLojaSchema = z.object({
@@ -80,6 +81,13 @@ export async function PUT(
      return NextResponse.json({ error: 'Erro ao atualizar loja' }, { status: 500 })
    }
 
+   await logActivity({
+    userId: decoded.userId,
+    action: 'Loja Adicionanda',
+    details: 'Voçe adicionou uma loja com sucesso',
+    type: 'media_analysis',
+  })
+
    return NextResponse.json(updatedLoja)
 
  } catch (error) {
@@ -125,6 +133,13 @@ export async function DELETE(
      console.error('Erro ao deletar loja:', deleteError)
      return NextResponse.json({ error: 'Erro ao deletar loja' }, { status: 500 })
    }
+
+   await logActivity({
+    userId: decoded.userId,
+    action: 'Loja Deletada',
+    details: 'Voçe removeu a loja com sucesso',
+    type: 'media_analysis',
+  })
 
    return NextResponse.json({ message: 'Loja deletada com sucesso' })
 

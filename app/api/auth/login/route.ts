@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { verifyPassword, generateToken } from '@/lib/auth'
 import { loginSchema } from '@/lib/validations'
+import { logActivity } from '@/lib/activity-logger'
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,6 +54,17 @@ export async function POST(request: NextRequest) {
 
     // Retornar dados do usuário (sem senha) e token
     const { password: _, ...userWithoutPassword } = user
+
+    await logActivity({
+      userId: user.id,
+      action: 'Login realizado',
+      details: `Login no sistema via ${user.email}`,
+      type: 'login',
+      metadata: {
+        email: user.email,
+        timestamp: new Date().toISOString()
+      }
+    })
 
     return NextResponse.json({
       user: userWithoutPassword,

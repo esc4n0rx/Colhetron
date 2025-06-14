@@ -118,6 +118,19 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+    await logActivity({
+      userId: decoded.userId,
+      action: 'Nova separação criada',
+      details: `Separação ${type} criada com ${processedData.materials.length} materiais`,
+      type: 'upload',
+      metadata: {
+        fileName: file.name,
+        type,
+        date,
+        totalMaterials: processedData.materials.length,
+        totalStores: processedData.stores.length
+      }
+    })
 
     return NextResponse.json({
       message: 'Separação criada com sucesso',

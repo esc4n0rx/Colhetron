@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
@@ -19,6 +18,7 @@ import ConfiguracoesPage from "@/components/pages/ConfiguracoesPage"
 import SobrePage from "@/components/pages/SobrePage"
 import AtualizacoesPage from "@/components/pages/AtualizacoesPage"
 import PerfilPage from "@/components/pages/PerfilPage"
+import { Settings, Info, Download } from 'lucide-react'
 
 const tabs = [
   { id: "pedidos", label: "PEDIDOS" },
@@ -31,12 +31,45 @@ const tabs = [
 
 export default function DashboardPage() {
   const { user, isLoading: authLoading } = useAuth()
-  const { isLoading: separationLoading } = useSeparation()
+  const { currentSeparation, isLoading: separationLoading, fetchActiveSeparation } = useSeparation()
   const router = useRouter()
   
   const [activeTab, setActiveTab] = useState("pedidos")
   const [currentPage, setCurrentPage] = useState("dashboard")
   const [isNewSeparationModalOpen, setIsNewSeparationModalOpen] = useState(false)
+
+  // Menu items para o Header
+  const menuItems = [
+    { id: "configuracoes", label: "Configurações", icon: Settings },
+    { id: "sobre", label: "Sobre", icon: Info },
+    { id: "atualizacoes", label: "Atualizações", icon: Download }
+  ]
+
+  // Função para lidar com a finalização da separação
+  const handleSeparationFinalized = async () => {
+    try {
+      // Se tiver função no context, use ela
+      if (fetchActiveSeparation) {
+        await fetchActiveSeparation()
+      } else {
+        // Fallback: recarregar os dados manualmente
+        const token = localStorage.getItem('colhetron_token')
+        if (token) {
+          const response = await fetch('/api/separations/active', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          // Se não tiver como atualizar o context, pode fazer um reload simples
+          if (response.ok) {
+            window.location.reload()
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar separação:', error)
+      // Em caso de erro, recarregar a página
+      window.location.reload()
+    }
+  }
 
   // Proteção de rota
   useEffect(() => {
@@ -129,8 +162,11 @@ export default function DashboardPage() {
       {/* Conteúdo principal */}
       <div className={separationLoading ? "opacity-0 pointer-events-none" : "opacity-100"}>
         <Header 
+          currentSeparation={currentSeparation}
           onNavigate={setCurrentPage} 
           onNewSeparationClick={() => setIsNewSeparationModalOpen(true)}
+          onSeparationFinalized={handleSeparationFinalized}
+          menuItems={menuItems}
         />
 
         <main className="container mx-auto px-6 py-8">

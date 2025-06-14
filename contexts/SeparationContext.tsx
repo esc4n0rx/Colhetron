@@ -19,18 +19,25 @@ interface SeparationContextType {
   currentSeparation: Separation | null
   isLoading: boolean
   refreshSeparation: () => void
+  fetchActiveSeparation: () => Promise<void>
 }
 
 const SeparationContext = createContext<SeparationContextType | undefined>(undefined)
 
 export function SeparationProvider({ children }: { children: React.ReactNode }) {
-  const { currentSeparation, isLoading, refreshActiveSeparation } = useSeparations()
+  const { 
+    currentSeparation, 
+    isLoading, 
+    refreshActiveSeparation,
+    fetchActiveSeparation 
+  } = useSeparations()
 
   return (
     <SeparationContext.Provider value={{ 
       currentSeparation, 
       isLoading, 
-      refreshSeparation: refreshActiveSeparation 
+      refreshSeparation: refreshActiveSeparation,
+      fetchActiveSeparation 
     }}>
       {children}
     </SeparationContext.Provider>

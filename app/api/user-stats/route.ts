@@ -45,24 +45,24 @@ export async function GET(request: NextRequest) {
 
     // 2. Calcular estatísticas do usuário
     const totalSeparacoes = separacoes?.length || 0
-    const separacoesFinalizadas = separacoes?.filter(sep => sep.status === 'finalized').length || 0
+    const separacoesFinalizadas = separacoes?.filter(sep => sep.status === 'completed').length || 0
     const separacoesAtivas = separacoes?.filter(sep => sep.status === 'active').length || 0
 
     // Calcular médias
     const mediaItemsSeparados = separacoesFinalizadas > 0 
       ? Math.round(separacoes
-          .filter(sep => sep.status === 'finalized')
+          .filter(sep => sep.status === 'completed')
           .reduce((acc, sep) => acc + (sep.total_items || 0), 0) / separacoesFinalizadas)
       : 0
 
     const mediaLojas = separacoesFinalizadas > 0
       ? Math.round(separacoes
-          .filter(sep => sep.status === 'finalized')
+          .filter(sep => sep.status === 'completed')
           .reduce((acc, sep) => acc + (sep.total_stores || 0), 0) / separacoesFinalizadas)
       : 0
 
     // Calcular tempo médio de separação
-    const tempoMedioSeparacao = await calculateTempoMedioSeparacao(separacoes.filter(sep => sep.status === 'finalized'))
+    const tempoMedioSeparacao = await calculateTempoMedioSeparacao(separacoes.filter(sep => sep.status === 'completed'))
 
     // 3. Calcular ranking do usuário
     const { data: allUsers, error: usersError } = await supabaseAdmin
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
         acc[sep.user_id] = { total: 0, finalizadas: 0 }
       }
       acc[sep.user_id].total++
-      if (sep.status === 'finalized') {
+      if (sep.status === 'completed') {
         acc[sep.user_id].finalizadas++
       }
       return acc
