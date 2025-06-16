@@ -1,4 +1,4 @@
-// hooks/usePedidosData.ts (ATUALIZADO)
+// hooks/usePedidosData.ts
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -9,6 +9,15 @@ interface PedidoItem {
   codigo: string
   descricao: string
   [key: string]: string | number // Para as colunas das lojas
+}
+
+interface UploadReforcoResponse {
+  success: boolean
+  message?: string
+  error?: string
+  processedItems?: number
+  updatedItems?: number
+  newItems?: number
 }
 
 export function usePedidosData() {
@@ -90,36 +99,88 @@ export function usePedidosData() {
       const response = await fetch('/api/separations/update-item-type', {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId, typeSeparation })
-      })
+       body: JSON.stringify({ itemId, typeSeparation })
+     })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro ao atualizar tipo de separação')
-      }
+     if (!response.ok) {
+       const errorData = await response.json()
+       throw new Error(errorData.error || 'Erro ao atualizar tipo de separação')
+     }
 
-      setPedidos(prev => prev.map(pedido => 
-        pedido.id === itemId ? { ...pedido, tipoSepar: typeSeparation } : pedido
-      ))
+     setPedidos(prev => prev.map(pedido => 
+       pedido.id === itemId ? { ...pedido, tipoSepar: typeSeparation } : pedido
+     ))
 
-      return { success: true }
-    } catch (error) {
-      console.error('Erro ao atualizar tipo de separação:', error)
-      return { success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' }
-    }
-  }
+     return { success: true }
+   } catch (error) {
+     console.error('Erro ao atualizar tipo de separação:', error)
+     return { success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' }
+   }
+ }
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+ /**
+  * Função para upload de reforço
+  * Implementa as regras de negócio:
+  * - Se material não tinha separação ativa -> adiciona
+  * - Se já tinha quantidade > 0 -> soma
+  * - Se antes tinha quantidade > 0 e agora não tem -> zera (redistribuição)
+  */
+ const uploadReforco = async (file: File): Promise<UploadReforcoResponse> => {
+   try {
+     const token = localStorage.getItem('colhetron_token')
+     if (!token) throw new Error('Token não encontrado')
 
-  return {
-    pedidos,
-    lojas,
-    isLoading,
-    error,
-    updateQuantity,
-    updateItemType,
-    refetch: fetchData
-  }
+     // Preparar FormData
+     const formData = new FormData()
+     formData.append('file', file)
+
+     const response = await fetch('/api/separations/upload-reforco', {
+       method: 'POST',
+       headers: {
+         'Authorization': `Bearer ${token}`
+       },
+       body: formData
+     })
+
+     if (!response.ok) {
+       const errorData = await response.json()
+       throw new Error(errorData.error || 'Erro ao carregar reforço')
+     }
+
+     const result = await response.json()
+
+     // Recarregar dados após o upload
+     await fetchData()
+
+     return {
+       success: true,
+       message: result.message,
+       processedItems: result.processedItems,
+       updatedItems: result.updatedItems,
+       newItems: result.newItems
+     }
+
+   } catch (error) {
+     console.error('Erro ao carregar reforço:', error)
+     return {
+       success: false,
+       error: error instanceof Error ? error.message : 'Erro desconhecido'
+     }
+   }
+ }
+
+ useEffect(() => {
+   fetchData()
+ }, [fetchData])
+
+ return {
+   pedidos,
+   lojas,
+   isLoading,
+   error,
+   updateQuantity,
+   updateItemType,
+   uploadReforco,
+   refetch: fetchData
+ }
 }
