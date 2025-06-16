@@ -38,71 +38,47 @@ type ColumnWidths = {
   [key: string]: number;
 };
 
-// --- HOOK PARA LÓGICA DE REDIMENSIONAMENTO DE COLUNAS ---
+// --- COMPONENTE EDITÁVEL SELECT ---
 
-const useResizableColumns = (
-  initialWidths: ColumnWidths,
-  storageKey: string
-) => {
-  const [columnWidths, setColumnWidths] = useState<ColumnWidths>(initialWidths);
-  const isResizing = useRef<string | null>(null);
-  const startX = useRef(0);
-  const startWidth = useRef(0);
+function EditableSelect({ value, onSave, disabled }: EditableSelectProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempValue, setTempValue] = useState(value);
 
-  useEffect(() => {
-    const savedWidths = localStorage.getItem(storageKey);
-    if (savedWidths) {
-      setColumnWidths(JSON.parse(savedWidths));
-    }
-  }, [storageKey]);
+  const options = ['FRIO', 'SECO', 'ORGÂNICO'];
 
-  useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(columnWidths));
-  }, [columnWidths, storageKey]);
-  
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing.current) return;
-    
-    const deltaX = e.clientX - startX.current;
-    const newWidth = startWidth.current + deltaX;
-    
-    if (newWidth > 50) { // Largura mínima da coluna
-      setColumnWidths(prev => ({
-        ...prev,
-        [isResizing.current!]: newWidth
-      }));
-    }
-  }, []);
+  const handleSave = (newValue: string) => {
+    onSave(newValue);
+    setIsEditing(false);
+  };
 
-  const handleMouseUp = useCallback(() => {
-    isResizing.current = null;
-    document.body.style.cursor = 'default';
-    document.body.style.userSelect = 'auto';
-  }, []);
+  if (isEditing) {
+    return (
+      <Select value={tempValue} onValueChange={handleSave} disabled={disabled}>
+        <SelectTrigger className="w-full h-5 text-[10px] bg-gray-800 border-blue-500 text-white p-1">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="bg-gray-800 border-gray-700">
+          {options.map(option => (
+            <SelectItem key={option} value={option} className="text-[10px]">{option}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
 
-  useEffect(() => {
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [handleMouseMove, handleMouseUp]);
+  return (
+    <div
+      onClick={() => !disabled && setIsEditing(true)}
+      className={`w-full h-5 flex items-center justify-center cursor-pointer hover:bg-gray-700 rounded text-[10px] font-medium ${
+        disabled ? 'cursor-not-allowed opacity-50' : ''
+      }`}
+    >
+      {value || '-'}
+    </div>
+  );
+}
 
-  const startResizing = useCallback((columnKey: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizing.current = columnKey;
-    startX.current = e.clientX;
-    startWidth.current = columnWidths[columnKey];
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }, [columnWidths]);
-
-  return { columnWidths, startResizing };
-};
-
-// --- COMPONENTES DE INPUT EDITÁVEL ---
+// --- COMPONENTE INPUT EDITÁVEL ---
 
 function EditableInput({ value, onSave, disabled }: EditableInputProps) {
   const [isEditing, setIsEditing] = useState(false)
@@ -131,7 +107,7 @@ function EditableInput({ value, onSave, disabled }: EditableInputProps) {
         onChange={(e) => setTempValue(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
-        className="w-16 h-6 text-center text-xs bg-gray-800 border-blue-500 text-white"
+        className="w-12 h-5 text-center text-[10px] bg-gray-800 border-blue-500 text-white p-1"
         autoFocus
         disabled={disabled}
       />
@@ -141,166 +117,133 @@ function EditableInput({ value, onSave, disabled }: EditableInputProps) {
   return (
     <div
       onClick={() => !disabled && setIsEditing(true)}
-      className={`w-16 h-6 flex items-center justify-center cursor-pointer hover:bg-gray-700 rounded text-xs ${
+      className={`w-12 h-5 flex items-center justify-center cursor-pointer hover:bg-gray-700 rounded text-[10px] ${
         value > 0 ? "text-green-400 font-semibold" : "text-gray-500"
       } ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
-      aria-label={`Valor atual ${value}, clique para editar`}
     >
-      {value || ""}
+      {value}
     </div>
   )
 }
 
-function EditableSelect({ value, onSave, disabled }: EditableSelectProps) {
-  const handleSave = (newValue: string) => {
-    if (newValue) {
-      onSave(newValue);
-    }
-  };
+// --- HOOK PARA LÓGICA DE REDIMENSIONAMENTO DE COLUNAS ---
 
-  return (
-    <Select value={value} onValueChange={handleSave} disabled={disabled}>
-      <SelectTrigger className="w-full h-6 text-xs bg-transparent border-none text-white focus:ring-0 focus:ring-offset-0 p-0">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent className="bg-gray-800 border-gray-700 text-white">
-        <SelectItem value="SECO">SECO</SelectItem>
-        <SelectItem value="FRIO">FRIO</SelectItem>
-        <SelectItem value="ORGANICO">ORGÂNICO</SelectItem>
-      </SelectContent>
-    </Select>
-  );
-}
+const useResizableColumns = (
+  initialWidths: ColumnWidths,
+  storageKey: string
+) => {
+  const [columnWidths, setColumnWidths] = useState<ColumnWidths>(initialWidths);
+  const isResizing = useRef<string | null>(null);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  useEffect(() => {
+    const savedWidths = localStorage.getItem(storageKey);
+    if (savedWidths) {
+      setColumnWidths(JSON.parse(savedWidths));
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(storageKey, JSON.stringify(columnWidths));
+  }, [columnWidths, storageKey]);
+  
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing.current) return;
+    
+    const deltaX = e.clientX - startX.current;
+    const newWidth = startWidth.current + deltaX;
+    
+    if (newWidth > 40) { // Largura mínima da coluna reduzida
+      setColumnWidths(prev => ({
+        ...prev,
+        [isResizing.current!]: newWidth
+      }));
+    }
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    isResizing.current = null;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+  }, [handleMouseMove]);
+
+  const startResizing = useCallback((columnKey: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = columnKey;
+    startX.current = e.clientX;
+    startWidth.current = columnWidths[columnKey];
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [columnWidths, handleMouseMove, handleMouseUp]);
+
+  return { columnWidths, startResizing };
+};
 
 // --- MODAL DE UPLOAD DE REFORÇO ---
 
 interface ReforcoUploadModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onUpload: (file: File) => Promise<void>
-  isUploading: boolean
+  isOpen: boolean;
+  onClose: () => void;
+  onUpload: (file: File) => void;
+  isUploading: boolean;
 }
 
 function ReforcoUploadModal({ isOpen, onClose, onUpload, isUploading }: ReforcoUploadModalProps) {
-  const [file, setFile] = useState<File | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
+
+  const handleUpload = () => {
     if (selectedFile) {
-      // Validar se é arquivo Excel
-      const validTypes = [
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-excel',
-        'text/csv'
-      ]
-      
-      if (validTypes.includes(selectedFile.type)) {
-        setFile(selectedFile)
-      } else {
-        toast.error('Arquivo deve ser Excel (.xlsx, .xls) ou CSV')
-        e.target.value = ''
-      }
+      onUpload(selectedFile);
+      setSelectedFile(null);
     }
-  }
-
-  const handleUpload = async () => {
-    if (!file) {
-      toast.error('Selecione um arquivo primeiro')
-      return
-    }
-
-    try {
-      await onUpload(file)
-      setFile(null)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-      onClose()
-    } catch (error) {
-      console.error('Erro no upload:', error)
-    }
-  }
-
-  const handleClose = () => {
-    setFile(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-    onClose()
-  }
+  };
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-gray-900 border-gray-700 text-white">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Carregar Reforço</DialogTitle>
+          <DialogTitle className="flex items-center">
+            <Upload className="w-5 h-5 mr-2 text-blue-400" />
+            Carregar Arquivo de Reforço
+          </DialogTitle>
           <DialogDescription className="text-gray-400">
-            Selecione uma planilha com materiais que precisam de reforço ou redistribuição.
-            O arquivo deve ter o mesmo formato da planilha de upload de pedidos.
+            Selecione um arquivo Excel (.xlsx) com os dados de reforço
           </DialogDescription>
         </DialogHeader>
-
+        
         <div className="space-y-4">
-          <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center">
-            <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <div className="space-y-2">
-              <p className="text-sm text-gray-400">
-                Clique para selecionar ou arraste o arquivo aqui
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                onChange={handleFileChange}
-                className="hidden"
-                disabled={isUploading}
-              />
-              <Button
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                className="border-gray-600 text-white hover:bg-gray-800"
-              >
-                Selecionar Arquivo
-              </Button>
-            </div>
-          </div>
-
-          {file && (
-            <div className="bg-gray-800 p-3 rounded-lg">
+          <Input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileSelect}
+            className="bg-gray-800 border-gray-700 text-white"
+          />
+          
+          {selectedFile && (
+            <div className="p-3 bg-gray-800 rounded border border-gray-700">
               <p className="text-sm text-gray-300">
-                <strong>Arquivo selecionado:</strong> {file.name}
-              </p>
-              <p className="text-xs text-gray-400">
-                Tamanho: {(file.size / 1024 / 1024).toFixed(2)} MB
+                Arquivo selecionado: <span className="text-blue-400">{selectedFile.name}</span>
               </p>
             </div>
           )}
-
-          <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4">
-            <h4 className="font-semibold text-blue-300 mb-2">Regras de Negócio:</h4>
-            <ul className="text-sm text-blue-200 space-y-1">
-              <li>• Se o material não tinha separação ativa, será adicionado</li>
-              <li>• Se já tinha quantidade, será somada</li>
-              <li>• Se antes tinha quantidade e agora não tem, será zerada (redistribuição)</li>
-              <li>• As tabelas de separação serão atualizadas automaticamente</li>
-            </ul>
-          </div>
         </div>
 
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={isUploading}
-            className="border-gray-600 text-white hover:bg-gray-800"
-          >
+          <Button variant="outline" onClick={onClose} disabled={isUploading}>
             Cancelar
           </Button>
-          <Button
-            onClick={handleUpload}
-            disabled={!file || isUploading}
+          <Button 
+            onClick={handleUpload} 
+            disabled={!selectedFile || isUploading}
             className="bg-blue-600 hover:bg-blue-700"
           >
             {isUploading ? (
@@ -340,11 +283,12 @@ export default function PedidosTab() {
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const topScrollRef = useRef<HTMLDivElement>(null);
 
+  // Larguras iniciais das colunas mais compactas
   const initialColumnWidths: ColumnWidths = {
-    TIPO: 120,
-    Codigo: 100,
-    Descricao: 350,
-    ...lojas.reduce((acc, loja) => ({ ...acc, [loja]: 80 }), {})
+    TIPO: 90,
+    Codigo: 70,
+    Descricao: 210,
+    ...lojas.reduce((acc, loja) => ({ ...acc, [loja]: 50 }), {})
   };
 
   const { columnWidths, startResizing } = useResizableColumns(initialColumnWidths, 'pedidos-col-widths');
@@ -381,69 +325,42 @@ export default function PedidosTab() {
 
   // Filtrar pedidos
   const filteredPedidos = pedidos.filter(pedido => {
-    const matchesSearch = searchTerm === "" || 
-      pedido.descricao.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      pedido.codigo.includes(searchTerm)
-    
-    const matchesType = filtroTipo === "Todos" || pedido.tipoSepar === filtroTipo
-    
-    return matchesSearch && matchesType
+    const matchesSearch = pedido.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         pedido.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesTipo = filtroTipo === 'Todos' || pedido.tipoSepar === filtroTipo
+    return matchesSearch && matchesTipo
   })
 
-  const handleQuantityUpdate = useCallback(async (itemId: string, storeCode: string, quantity: number) => {
-    const result = await updateQuantity(itemId, storeCode, quantity)
-    if (!result.success && result.error) {
-      toast.error(`Erro ao atualizar: ${result.error}`)
+  // Handlers
+  const handleQuantityUpdate = async (id: string, loja: string, value: number) => {
+    try {
+      await updateQuantity(id, loja, value)
+      toast.success('Quantidade atualizada com sucesso!')
+    } catch (error) {
+      toast.error('Erro ao atualizar quantidade')
     }
-  }, [updateQuantity])
+  }
 
-  const handleTypeUpdate = useCallback(async (itemId: string, typeSeparation: string) => {
-    const result = await updateItemType(itemId, typeSeparation)
-    if (!result.success && result.error) {
-      toast.error(`Erro ao atualizar tipo: ${result.error}`)
+  const handleTypeUpdate = async (id: string, value: string) => {
+    try {
+      await updateItemType(id, value)
+      toast.success('Tipo atualizado com sucesso!')
+    } catch (error) {
+      toast.error('Erro ao atualizar tipo')
     }
-  }, [updateItemType])
+  }
 
   const handleReforcoUpload = async (file: File) => {
     setIsUploadingReforco(true)
     try {
-      const result = await uploadReforco(file)
-      if (result.success) {
-        toast.success(`Reforço carregado com sucesso! ${result.message || ''}`)
-      } else {
-        toast.error(`Erro ao carregar reforço: ${result.error}`)
-      }
+      await uploadReforco(file)
+      toast.success('Reforço carregado com sucesso!')
+      setIsReforcoModalOpen(false)
     } catch (error) {
-      toast.error('Erro inesperado ao carregar reforço')
+      toast.error('Erro ao carregar reforço')
     } finally {
       setIsUploadingReforco(false)
     }
-  }
-
-  const today = new Date().toLocaleDateString("pt-BR", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-
-  if (error) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="space-y-4"
-      >
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-2">Erro ao carregar dados</h3>
-            <p className="text-gray-400">{error}</p>
-          </div>
-        </div>
-      </motion.div>
-    )
   }
 
   return (
@@ -453,75 +370,80 @@ export default function PedidosTab() {
       transition={{ duration: 0.5 }}
       className="space-y-4"
     >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold apple-font text-white">Pedidos do Dia</h2>
-          <p className="text-gray-400 capitalize">{today}</p>
-        </div>
-
-        <div className="flex gap-4 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-80">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+      {/* Cabeçalho com filtros */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
               placeholder="Buscar por código ou descrição..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-gray-800/50 border-gray-700 text-white placeholder-gray-400 h-10"
+              className="pl-10 w-80 bg-gray-800/50 border-gray-700 text-white h-10"
             />
           </div>
-
+          
           <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-            <SelectTrigger className="w-40 bg-gray-800/50 border-gray-700 text-white h-10">
+            <SelectTrigger className="w-32 bg-gray-800/50 border-gray-700 text-white h-10">
               <Filter className="w-4 h-4 mr-2" />
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700 text-white">
-              <SelectItem value="Todos">Todos os Tipos</SelectItem>
-              <SelectItem value="SECO">SECO</SelectItem>
+            <SelectContent className="bg-gray-800 border-gray-700">
+              <SelectItem value="Todos">Todos</SelectItem>
               <SelectItem value="FRIO">FRIO</SelectItem>
-              <SelectItem value="ORGANICO">ORGÂNICO</SelectItem>
+              <SelectItem value="SECO">SECO</SelectItem>
+              <SelectItem value="ORGÂNICO">ORGÂNICO</SelectItem>
             </SelectContent>
           </Select>
-
-          <Button
-            onClick={() => setIsReforcoModalOpen(true)}
-            className="bg-orange-600 hover:bg-orange-700 text-white h-10 px-4"
-            disabled={isLoading}
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Carregar Reforço
-          </Button>
         </div>
+
+        <Button
+          onClick={() => setIsReforcoModalOpen(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          <Upload className="w-4 h-4 mr-2" />
+          Carregar Reforço
+        </Button>
       </div>
 
-      {/* Scroll horizontal superior */}
-      <div
-        ref={topScrollRef}
-        className="overflow-x-auto"
-        style={{ maxWidth: '100%' }}
-      >
-        <div style={{ width: `${tableWidth}px`, height: '1px' }} />
-      </div>
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-900/50 border border-red-700 rounded-lg p-4 flex items-center">
+          <AlertCircle className="w-5 h-5 text-red-400 mr-3" />
+          <span className="text-red-300">{error}</span>
+        </div>
+      )}
 
-      {/* Tabela */}
-      <div className="bg-gray-900/50 backdrop-blur-sm rounded-lg border border-gray-800">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
-            <span className="ml-2 text-gray-400">Carregando pedidos...</span>
+      {/* Loading */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+          <span className="ml-3 text-gray-400">Carregando pedidos...</span>
+        </div>
+      )}
+
+      {/* Tabela com estilo Excel */}
+      {!isLoading && (
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg overflow-hidden">
+          {/* Scroll horizontal superior */}
+          <div 
+            ref={topScrollRef}
+            className="overflow-x-auto overflow-y-hidden h-3 bg-gray-800"
+            style={{ display: tableWidth > 1000 ? 'block' : 'none' }}
+          >
+            <div style={{ width: `${tableWidth}px`, height: '1px' }}></div>
           </div>
-        ) : (
+
           <div
             ref={tableContainerRef}
             className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-300px)]"
           >
-            <Table>
+            <Table className="border-collapse">
               <TableHeader className="sticky top-0 bg-gray-900 z-10">
-                <TableRow className="border-gray-800 hover:bg-gray-800/50">
+                <TableRow className="border-b-2 border-gray-700">
                   {/* Coluna TIPO */}
                   <TableHead
-                    className="text-white font-semibold bg-gray-900 sticky left-0 z-20 border-r border-gray-700"
+                    className="text-white font-semibold text-[10px] bg-gray-900 sticky left-0 z-20 border-r border-gray-600 border-b border-gray-600 p-1 h-7"
                     style={{ width: `${columnWidths.TIPO}px`, minWidth: `${columnWidths.TIPO}px` }}
                   >
                     <div className="flex items-center justify-between">
@@ -535,7 +457,7 @@ export default function PedidosTab() {
 
                   {/* Coluna Código */}
                   <TableHead
-                    className="text-white font-semibold bg-gray-900 sticky left-120 z-20 border-r border-gray-700"
+                    className="text-white font-semibold text-[10px] bg-gray-900 sticky z-20 border-r border-gray-600 border-b border-gray-600 p-1 h-7"
                     style={{ 
                       width: `${columnWidths.Codigo}px`, 
                       minWidth: `${columnWidths.Codigo}px`,
@@ -553,7 +475,7 @@ export default function PedidosTab() {
 
                   {/* Coluna Descrição */}
                   <TableHead
-                    className="text-white font-semibold bg-gray-900 sticky z-20 border-r border-gray-700"
+                    className="text-white font-semibold text-[10px] bg-gray-900 sticky z-20 border-r border-gray-600 border-b border-gray-600 p-1 h-7"
                     style={{ 
                       width: `${columnWidths.Descricao}px`, 
                       minWidth: `${columnWidths.Descricao}px`,
@@ -573,7 +495,7 @@ export default function PedidosTab() {
                   {lojas.map((loja) => (
                     <TableHead
                       key={loja}
-                      className="text-center text-white font-semibold text-xs"
+                      className="text-white font-semibold text-[10px] text-center bg-gray-900 border-r border-gray-600 border-b border-gray-600 p-1 h-7"
                       style={{ width: `${columnWidths[loja]}px`, minWidth: `${columnWidths[loja]}px` }}
                     >
                       <div className="flex items-center justify-between">
@@ -592,11 +514,11 @@ export default function PedidosTab() {
                 {filteredPedidos.map((pedido) => (
                   <TableRow
                     key={pedido.id}
-                    className="border-gray-800 hover:bg-gray-800/30 transition-colors"
+                    className="border-b border-gray-700 hover:bg-gray-800/30 transition-colors"
                   >
                     {/* Coluna TIPO */}
                     <TableCell
-                      className="bg-gray-900/80 sticky left-0 z-10 border-r border-gray-700"
+                      className="bg-gray-900/80 sticky left-0 z-10 border-r border-gray-600 p-1 h-6"
                       style={{ width: `${columnWidths.TIPO}px`, minWidth: `${columnWidths.TIPO}px` }}
                     >
                       <EditableSelect
@@ -608,7 +530,7 @@ export default function PedidosTab() {
 
                     {/* Coluna Código */}
                     <TableCell
-                      className="text-blue-300 font-mono text-xs bg-gray-900/80 sticky z-10 border-r border-gray-700"
+                      className="text-blue-300 font-mono text-[10px] bg-gray-900/80 sticky z-10 border-r border-gray-600 p-1 h-6"
                       style={{ 
                         width: `${columnWidths.Codigo}px`, 
                         minWidth: `${columnWidths.Codigo}px`,
@@ -620,7 +542,7 @@ export default function PedidosTab() {
 
                     {/* Coluna Descrição */}
                     <TableCell
-                      className="text-gray-300 text-xs bg-gray-900/80 sticky z-10 border-r border-gray-700"
+                      className="text-gray-300 text-[10px] bg-gray-900/80 sticky z-10 border-r border-gray-600 p-1 h-6"
                       style={{ 
                         width: `${columnWidths.Descricao}px`, 
                         minWidth: `${columnWidths.Descricao}px`,
@@ -636,7 +558,7 @@ export default function PedidosTab() {
                     {lojas.map((loja) => (
                       <TableCell
                         key={loja}
-                        className="text-center p-1"
+                        className="text-center border-r border-gray-600 p-1 h-6"
                         style={{ width: `${columnWidths[loja]}px`, minWidth: `${columnWidths[loja]}px` }}
                       >
                         <EditableInput
@@ -651,8 +573,8 @@ export default function PedidosTab() {
               </TableBody>
             </Table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Informações dos resultados */}
       <div className="flex justify-between items-center text-sm text-gray-400">
