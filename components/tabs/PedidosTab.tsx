@@ -4,13 +4,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Search, Filter, Loader2, GripVertical, Upload, AlertCircle } from 'lucide-react'
+import { Search, Filter, Loader2, GripVertical, Upload, AlertCircle,Scissors  } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { usePedidosData } from '@/hooks/usePedidosData'
+import CorteModal from '@/components/modals/CorteModal'
 
 // --- INTERFACES E TIPOS ---
 
@@ -271,13 +272,15 @@ export default function PedidosTab() {
     error, 
     updateQuantity, 
     updateItemType,
-    uploadReforco 
+    uploadReforco,
+    refetch
   } = usePedidosData()
   
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('Todos')
   const [isReforcoModalOpen, setIsReforcoModalOpen] = useState(false)
   const [isUploadingReforco, setIsUploadingReforco] = useState(false)
+  const [isCorteModalOpen, setIsCorteModalOpen] = useState(false)
 
   // Refs para sincronização do scroll
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -341,6 +344,11 @@ export default function PedidosTab() {
     }
   }
 
+  const handleCorteExecuted = useCallback(() => {
+    refetch()
+    toast.success('Dados atualizados após corte!')
+  }, [refetch])
+
   const handleTypeUpdate = async (id: string, value: string) => {
     try {
       await updateItemType(id, value)
@@ -396,6 +404,14 @@ export default function PedidosTab() {
             </SelectContent>
           </Select>
         </div>
+      <div className="flex gap-3">
+        <Button
+            onClick={() => setIsCorteModalOpen(true)}
+            className="bg-red-600 hover:bg-red-700 text-white"
+          >
+            <Scissors className="w-4 h-4 mr-2" />
+            Corte de Produtos
+          </Button>
 
         <Button
           onClick={() => setIsReforcoModalOpen(true)}
@@ -405,6 +421,7 @@ export default function PedidosTab() {
           Carregar Reforço
         </Button>
       </div>
+    </div>
 
       {/* Error Display */}
       {error && (
@@ -592,6 +609,12 @@ export default function PedidosTab() {
         onClose={() => setIsReforcoModalOpen(false)}
         onUpload={handleReforcoUpload}
         isUploading={isUploadingReforco}
+      />
+      {/* Modal de Corte - NOVO */}
+      <CorteModal
+        isOpen={isCorteModalOpen}
+        onClose={() => setIsCorteModalOpen(false)}
+        onCutExecuted={handleCorteExecuted}
       />
     </motion.div>
   )
