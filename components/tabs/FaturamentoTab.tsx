@@ -1,4 +1,3 @@
-// components/tabs/FaturamentoTab.tsx
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -40,7 +39,6 @@ export function FaturamentoTab() {
 
   const itemsPerPage = 10
 
-  // Verificar status da tabela de médias
   const checkMediaAnalysisStatus = async () => {
     setIsLoading(true)
     try {
@@ -64,7 +62,6 @@ export function FaturamentoTab() {
       } else if (data.itemsWithError > 10) {
         setShowErrorModal(true)
       } else {
-        // Todos os itens estão OK, gerar tabela de faturamento
         await generateFaturamentoTable()
       }
     } catch (error) {
@@ -75,7 +72,6 @@ export function FaturamentoTab() {
     }
   }
 
-  // Gerar tabela de faturamento
   const generateFaturamentoTable = async () => {
     try {
       const token = localStorage.getItem('colhetron_token')
@@ -99,7 +95,7 @@ export function FaturamentoTab() {
     }
   }
 
-  // Gerar template Excel
+
   const generateExcelTemplate = async () => {
     setIsGeneratingTemplate(true)
     try {
@@ -116,7 +112,6 @@ export function FaturamentoTab() {
         throw new Error(error.error || 'Erro ao gerar template Excel')
       }
 
-      // Download do arquivo
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -145,7 +140,6 @@ export function FaturamentoTab() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <Card className="bg-gray-900/50 border-gray-800">
         <CardHeader>
           <CardTitle className="text-white apple-font flex items-center">
@@ -193,7 +187,6 @@ export function FaturamentoTab() {
         </CardContent>
       </Card>
 
-      {/* Tabela de Faturamento */}
       {faturamentoData.length > 0 && (
         <Card className="bg-gray-900/50 border-gray-800">
           <CardHeader>
@@ -238,7 +231,6 @@ export function FaturamentoTab() {
         </Card>
       )}
 
-      {/* Modal de Erros */}
       <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
         <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-4xl max-h-[80vh]">
           <DialogHeader>
@@ -281,7 +273,6 @@ export function FaturamentoTab() {
               </Table>
             </ScrollArea>
 
-            {/* Paginação */}
             {totalPages > 1 && (
               <div className="flex justify-center gap-2">
                 <Button
@@ -319,7 +310,6 @@ export function FaturamentoTab() {
               <Button
                 onClick={() => {
                   setShowErrorModal(false)
-                  // Redirecionar para a tab de análise de médias
                   toast.info('Acesse a aba "Análise de Médias" para corrigir os itens')
                 }}
                 className="bg-blue-600 hover:bg-blue-700"

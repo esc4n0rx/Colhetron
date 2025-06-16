@@ -1,4 +1,3 @@
-// components/tabs/CadastroTab.tsx
 "use client"
 
 import React, { useState, useCallback, useMemo } from 'react'
@@ -15,7 +14,7 @@ import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { useCadastroData, LojaItem, MaterialItem } from '@/hooks/useCadastroData'
 
-// Componente de paginação
+
 interface PaginationProps {
   currentPage: number
   totalPages: number
@@ -89,7 +88,6 @@ function Pagination({ currentPage, totalPages, onPageChange, totalItems, itemsPe
   )
 }
 
-// Componente para célula editável
 interface EditableCellProps {
   value: any
   onSave: (value: any) => void
@@ -174,8 +172,6 @@ export default function CadastroTab() {
   const [showNovoMaterialModal, setShowNovoMaterialModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [uploadType, setUploadType] = useState<'lojas' | 'materiais'>('lojas')
-  
-  // Estados de paginação
   const [currentPageLojas, setCurrentPageLojas] = useState(1)
   const [currentPageMateriais, setCurrentPageMateriais] = useState(1)
   const itemsPerPage = 20
@@ -193,7 +189,7 @@ export default function CadastroTab() {
     uploadMateriais
   } = useCadastroData()
 
-  // Filtros e paginação para lojas
+
   const filteredLojas = useMemo(() => {
     return lojas.filter(loja => {
       const matchesSearch = searchTermLojas === "" || 
@@ -214,7 +210,6 @@ export default function CadastroTab() {
 
   const totalPagesLojas = Math.ceil(filteredLojas.length / itemsPerPage)
 
-  // Filtros e paginação para materiais
   const filteredMateriais = useMemo(() => {
     return materiais.filter(material => {
       const matchesSearch = searchTermMateriais === "" || 
@@ -295,13 +290,13 @@ export default function CadastroTab() {
       transition={{ duration: 0.5 }}
       className="space-y-6"
     >
-      {/* Header */}
+
       <div>
         <h2 className="text-2xl font-bold apple-font text-white">Cadastros</h2>
         <p className="text-gray-400">Gerencie lojas e materiais do sistema</p>
       </div>
 
-      {/* Loading */}
+
       {isLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
@@ -311,7 +306,7 @@ export default function CadastroTab() {
 
       {!isLoading && (
         <>
-          {/* Tabela de Lojas */}
+
           <Card className="bg-gray-900/50 border-gray-800">
             <CardHeader>
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -340,7 +335,6 @@ export default function CadastroTab() {
                 </div>
               </div>
 
-              {/* Filtros Lojas */}
               <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
               <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
@@ -498,7 +492,7 @@ export default function CadastroTab() {
                </Table>
              </div>
              
-             {/* Paginação Lojas */}
+
              {totalPagesLojas > 1 && (
                <Pagination
                  currentPage={currentPageLojas}
@@ -511,7 +505,7 @@ export default function CadastroTab() {
            </CardContent>
          </Card>
 
-         {/* Tabela de Materiais */}
+
          <Card className="bg-gray-900/50 border-gray-800">
            <CardHeader>
              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -540,7 +534,6 @@ export default function CadastroTab() {
                </div>
              </div>
 
-             {/* Filtros Materiais */}
              <div className="flex flex-col sm:flex-row gap-4">
                <div className="relative flex-1">
                  <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
@@ -624,7 +617,6 @@ export default function CadastroTab() {
                </Table>
              </div>
              
-             {/* Paginação Materiais */}
              {totalPagesMateriais > 1 && (
                <Pagination
                  currentPage={currentPageMateriais}
@@ -639,7 +631,6 @@ export default function CadastroTab() {
        </>
      )}
 
-     {/* Modais */}
      <UploadModal
        isOpen={showUploadModal}
        onClose={() => setShowUploadModal(false)}
@@ -662,7 +653,6 @@ export default function CadastroTab() {
  )
 }
 
-// Modal de Upload
 interface UploadModalProps {
  isOpen: boolean
  onClose: () => void
@@ -760,7 +750,6 @@ function UploadModal({ isOpen, onClose, onUpload, type }: UploadModalProps) {
  )
 }
 
-// Modal Nova Loja
 interface NovaLojaModalProps {
  isOpen: boolean
  onClose: () => void
@@ -963,7 +952,6 @@ function NovaLojaModal({ isOpen, onClose, onSave }: NovaLojaModalProps) {
  )
 }
 
-// Modal Novo Material
 interface NovoMaterialModalProps {
  isOpen: boolean
  onClose: () => void

@@ -1,4 +1,3 @@
-// components/tabs/SeparacaoTab.tsx
 "use client"
 
 import { useState, useMemo, useCallback } from "react"
@@ -15,7 +14,6 @@ export default function SeparacaoTab() {
   const [filtroZona, setFiltroZona] = useState<string>("Todas")
   const [filtroSubzona, setFiltroSubzona] = useState<string>("Todas")
 
-  // Obter tipos disponíveis
   const availableTypes = useMemo(() => {
     const types = new Set(data.map(item => item.tipoSepar))
     const sortedTypes = Array.from(types).sort((a, b) => {
@@ -28,7 +26,7 @@ export default function SeparacaoTab() {
     return ['Todos', ...sortedTypes]
   }, [data])
 
-  // Obter zonas disponíveis baseadas no tipo de separação
+
   const availableZones = useMemo(() => {
     if (filtroTipo === "Todos") return ["Todas"]
     
@@ -43,7 +41,7 @@ export default function SeparacaoTab() {
     return ['Todas', ...Array.from(zones).sort()]
   }, [lojas, filtroTipo])
 
-  // Obter subzonas disponíveis baseadas na zona selecionada
+
   const availableSubzones = useMemo(() => {
     if (filtroTipo === "Todos" || filtroZona === "Todas" || filtroTipo === 'FRIO') {
       return ["Todas"]
@@ -59,19 +57,18 @@ export default function SeparacaoTab() {
     return ['Todas', ...Array.from(subzones).sort()]
   }, [lojas, filtroZona, filtroTipo])
 
-  // Filtrar dados
+
   const filteredData = useMemo(() => {
     if (filtroTipo === "Todos") return data
     return data.filter(item => item.tipoSepar === filtroTipo)
   }, [data, filtroTipo])
 
-  // Obter lojas ordenadas baseadas nos filtros
+
   const orderedStores = useMemo(() => {
     if (filtroTipo === "Todos") return []
     
     let stores = getOrderedStores(filtroTipo)
     
-    // Filtrar por zona se selecionada
     if (filtroZona !== "Todas") {
       stores = stores.filter(loja => {
         const zona = filtroTipo === 'FRIO' ? loja.zonaFrio : loja.zonaSeco
@@ -79,7 +76,7 @@ export default function SeparacaoTab() {
       })
     }
     
-    // Filtrar por subzona se selecionada (apenas para SECO)
+
     if (filtroSubzona !== "Todas" && filtroTipo === 'SECO') {
       stores = stores.filter(loja => loja.subzonaSeco === filtroSubzona)
     }
@@ -278,14 +275,13 @@ export default function SeparacaoTab() {
     }
   }, [filteredData, orderedStores, totals, filtroTipo, filtroZona, filtroSubzona])
 
-  // Reset filtros quando tipo muda
+
   const handleTipoChange = (tipo: typeof filtroTipo) => {
     setFiltroTipo(tipo)
     setFiltroZona("Todas")
     setFiltroSubzona("Todas")
   }
 
-  // Reset subzona quando zona muda
   const handleZonaChange = (zona: string) => {
     setFiltroZona(zona)
     setFiltroSubzona("Todas")
@@ -323,7 +319,7 @@ export default function SeparacaoTab() {
       transition={{ duration: 0.5 }}
       className="space-y-4"
     >
-      {/* Header */}
+
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold apple-font text-white">Separação por Zona</h2>
@@ -341,9 +337,9 @@ export default function SeparacaoTab() {
         </Button>
       </div>
 
-      {/* Filtros */}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Filtro Tipo */}
+
         <Card className="bg-gray-900/50 border-gray-800 p-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -370,7 +366,6 @@ export default function SeparacaoTab() {
           </div>
         </Card>
 
-        {/* Filtro Zona */}
         <Card className="bg-gray-900/50 border-gray-800 p-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -398,7 +393,6 @@ export default function SeparacaoTab() {
           </div>
         </Card>
 
-        {/* Filtro Subzona */}
         <Card className="bg-gray-900/50 border-gray-800 p-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -427,7 +421,7 @@ export default function SeparacaoTab() {
         </Card>
       </div>
 
-      {/* Tabela */}
+
       <Card className="bg-gray-900/50 border-gray-800">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
