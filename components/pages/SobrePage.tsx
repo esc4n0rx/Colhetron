@@ -12,7 +12,7 @@ interface SobrePageProps {
 
 export default function SobrePage({ onBack }: SobrePageProps) {
   const features = [
-    "Gestão completa de pedidos",
+    "Gestão completa de pedidos do flv",
     "Pré-separação inteligente",
     "Separação por zonas",
     "Análise de médias",
@@ -50,12 +50,12 @@ export default function SobrePage({ onBack }: SobrePageProps) {
           <CardHeader>
             <CardTitle className="text-white apple-font flex items-center">
               <Package className="w-5 h-5 mr-2" />
-              Sistema de Separação de Pedidos FLV
+              Sistema de Separação de Pedidos
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center space-x-2">
-              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Versão 1.0.0</Badge>
+              <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Versão 2.1.0</Badge>
               <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Estável</Badge>
             </div>
 
@@ -68,7 +68,7 @@ export default function SobrePage({ onBack }: SobrePageProps) {
               <h4 className="text-white font-semibold">Tecnologias Utilizadas:</h4>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="outline" className="bg-gray-800 text-gray-300 border-gray-600">
-                  Next.js 15
+                  Next.js 14
                 </Badge>
                 <Badge variant="outline" className="bg-gray-800 text-gray-300 border-gray-600">
                   React 18
@@ -159,7 +159,7 @@ export default function SobrePage({ onBack }: SobrePageProps) {
                 className="w-full justify-start bg-gray-800 border-gray-700 text-white hover:bg-gray-700"
               >
                 <Mail className="w-4 h-4 mr-2" />
-                paulo.cunha@hortifruti.com.br
+                suporte@sistema.com
               </Button>
 
               <Button
@@ -181,7 +181,7 @@ export default function SobrePage({ onBack }: SobrePageProps) {
 
             <div className="pt-4 border-t border-gray-700">
               <p className="text-center text-gray-400 text-sm">
-                © 2025 Sistema de Separação. Todos os direitos reservados.
+                © 2024 Sistema de Separação. Todos os direitos reservados.
               </p>
             </div>
           </CardContent>

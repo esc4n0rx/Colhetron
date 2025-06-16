@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useMemo, useCallback } from "react"
@@ -10,7 +11,7 @@ import { useSeparacaoData } from "@/hooks/useSeparacaoData"
 
 export default function SeparacaoTab() {
   const { data, lojas, isLoading, error, getOrderedStores } = useSeparacaoData()
-  const [filtroTipo, setFiltroTipo] = useState<"Todos" | "SECO" | "FRIO" | "ORGANICO">("Todos")
+  const [filtroTipo, setFiltroTipo] = useState<"Todos" | "SECO" | "FRIO" | "ORGANICO"|"OVOS"| "REFORÇO">("Todos")
   const [filtroZona, setFiltroZona] = useState<string>("Todas")
   const [filtroSubzona, setFiltroSubzona] = useState<string>("Todas")
 

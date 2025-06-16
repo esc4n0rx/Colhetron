@@ -1,16 +1,14 @@
-
+// app/api/cadastro/materiais/route.ts (ATUALIZADO)
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logActivity } from '@/lib/activity-logger'
 import { z } from 'zod'
-
-
 
 const materialSchema = z.object({
   material: z.string().min(1, 'Material é obrigatório'),
   descricao: z.string().min(1, 'Descrição é obrigatória'),
-  noturno: z.enum(['SECO', 'FRIO']),
-  diurno: z.enum(['SECO', 'FRIO'])
+  category: z.string().min(1, 'Categoria é obrigatória')
 })
 
 export async function GET(request: NextRequest) {
@@ -33,11 +31,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar materiais do usuário
+    // Buscar materiais - REMOVIDO filtro por user_id para cadastro global
     const { data: materiais, error } = await supabaseAdmin
       .from('colhetron_materiais')
       .select('*')
-      .eq('user_id', decoded.userId)
       .order('material')
 
     if (error) {
@@ -48,7 +45,17 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ materiais: materiais || [] })
+    // Mapear dados para o novo formato
+    const formattedMateriais = (materiais || []).map(material => ({
+      id: material.id,
+      material: material.material,
+      descricao: material.descricao,
+      category: material.diurno || material.noturno || 'SECO', // Fallback para dados antigos
+      noturno: material.noturno,
+      diurno: material.diurno
+    }))
+
+    return NextResponse.json({ materiais: formattedMateriais })
 
   } catch (error) {
     console.error('Erro na busca de materiais:', error)
@@ -82,11 +89,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = materialSchema.parse(body)
 
-    // Verificar se já existe material com mesmo código para o usuário
+    // Verificar se já existe material com este código
     const { data: existingMaterial } = await supabaseAdmin
       .from('colhetron_materiais')
       .select('id')
-      .eq('user_id', decoded.userId)
       .eq('material', validatedData.material)
       .single()
 
@@ -97,15 +103,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Criar novo material
-    const { data: newMaterial, error } = await supabaseAdmin
+    // Criar material com categoria dinâmica
+    const { data: material, error } = await supabaseAdmin
       .from('colhetron_materiais')
-      .insert([
-        {
-          ...validatedData,
-          user_id: decoded.userId
-        }
-      ])
+      .insert([{
+        user_id: decoded.userId,
+        material: validatedData.material,
+        descricao: validatedData.descricao,
+        diurno: validatedData.category,
+        noturno: validatedData.category, // Popular ambas as colunas
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }])
       .select()
       .single()
 
@@ -117,7 +126,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json(newMaterial, { status: 201 })
+    await logActivity({
+      userId: decoded.userId,
+      action: 'Material criado',
+      details: `Material '${validatedData.material}' criado na categoria '${validatedData.category}'`,
+      type: 'update'
+    })
+
+    // Retornar material no formato esperado
+    const formattedMaterial = {
+      id: material.id,
+      material: material.material,
+      descricao: material.descricao,
+      category: material.diurno,
+      noturno: material.noturno,
+      diurno: material.diurno
+    }
+
+    return NextResponse.json(formattedMaterial, { status: 201 })
 
   } catch (error) {
     console.error('Erro na criação de material:', error)
@@ -129,79 +155,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function PUT(request: NextRequest) {
-  try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Token de autorização necessário' },
-        { status: 401 }
-      )
-    }
-
-    const token = authHeader.split(' ')[1]
-    const decoded = verifyToken(token)
-    
-    if (!decoded) {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      )
-    }
-
-    const body = await request.json()
-    const { id, ...updateData } = body
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'ID é obrigatório' },
-        { status: 400 }
-      )
-    }
-
-    // Verificar se o material pertence ao usuário
-    const { data: existingMaterial, error: checkError } = await supabaseAdmin
-      .from('colhetron_materiais')
-      .select('id')
-      .eq('id', id)
-      .eq('user_id', decoded.userId)
-      .single()
-
-    if (checkError || !existingMaterial) {
-      return NextResponse.json(
-        { error: 'Material não encontrado ou não autorizado' },
-        { status: 404 }
-      )
-    }
-
-    // Atualizar material
-    const { data: updatedMaterial, error } = await supabaseAdmin
-      .from('colhetron_materiais')
-      .update(updateData)
-      .eq('id', id)
-      .eq('user_id', decoded.userId)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Erro ao atualizar material:', error)
-      return NextResponse.json(
-        { error: 'Erro ao atualizar material' },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json(updatedMaterial)
-
-  } catch (error) {
-    console.error('Erro na atualização de material:', error)
     return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }

@@ -11,7 +11,7 @@ import { usePreSeparacaoData } from "@/hooks/usePreSeparacaoData";
 
 export default function PreSeparacaoTab() {
   const { data, zones, isLoading, error } = usePreSeparacaoData();
-  const [filtroTipo, setFiltroTipo] = useState<"Todos" | "SECO" | "FRIO" | "ORGANICO">("Todos");
+  const [filtroTipo, setFiltroTipo] = useState<"Todos" | "SECO" | "FRIO" | "ORGANICO" | "OVO">("Todos");
 
   const availableTypes = useMemo(() => {
     const types = new Set(data.map(item => item.tipoSepar));

@@ -5,7 +5,7 @@ export interface ActivityLogData {
   userId: string
   action: string
   details?: string
-  type?: 'upload' | 'login' | 'separation' | 'media_analysis' | 'profile_update' | 'settings_change'
+  type?: 'upload' | 'login' | 'separation' | 'media_analysis' | 'profile_update' | 'settings_change'| 'update'
   metadata?: Record<string, any>
 }
 

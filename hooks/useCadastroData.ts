@@ -1,4 +1,4 @@
-// hooks/useCadastroData.ts
+// hooks/useCadastroData.ts (ATUALIZADO)
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -8,7 +8,7 @@ export interface LojaItem {
   nome: string
   tipo: 'CD' | 'Loja Padrão' | 'Administrativo'
   uf: string
-  centro: string // Nova propriedade
+  centro: string
   zonaSeco: string
   subzonaSeco: string
   zonaFrio: string
@@ -20,8 +20,9 @@ export interface MaterialItem {
   id: string
   material: string
   descricao: string
-  noturno: 'SECO' | 'FRIO'
-  diurno: 'SECO' | 'FRIO'
+  category: string  // Campo principal unificado
+  noturno?: string  // Manter para compatibilidade
+  diurno?: string   // Manter para compatibilidade
 }
 
 export function useCadastroData() {
@@ -107,6 +108,38 @@ export function useCadastroData() {
     }
   }
 
+  const updateMaterial = async (material: Partial<MaterialItem> & { id: string }) => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) throw new Error('Token não encontrado')
+
+      const response = await fetch(`/api/cadastro/materiais/${material.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(material)
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erro ao atualizar material')
+      }
+
+      const updatedMaterial = await response.json()
+      setMateriais(prev => prev.map(m => m.id === material.id ? updatedMaterial : m))
+      return { success: true }
+
+    } catch (error) {
+      console.error('Erro ao atualizar material:', error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Erro desconhecido' 
+      }
+    }
+  }
+
   const createLoja = async (loja: Omit<LojaItem, 'id'>) => {
     try {
       const token = localStorage.getItem('colhetron_token')
@@ -132,37 +165,6 @@ export function useCadastroData() {
 
     } catch (error) {
       console.error('Erro ao criar loja:', error)
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido' 
-      }
-    }
-  }
-
-  const updateMaterial = async (material: Partial<MaterialItem> & { id: string }) => {
-    try {
-      const token = localStorage.getItem('colhetron_token')
-      if (!token) throw new Error('Token não encontrado')
-
-      const response = await fetch(`/api/cadastro/materiais/${material.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(material)
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro ao atualizar material')
-      }
-
-      setMateriais(prev => prev.map(m => m.id === material.id ? { ...m, ...material } : m))
-      return { success: true }
-
-    } catch (error) {
-      console.error('Erro ao atualizar material:', error)
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Erro desconhecido' 
