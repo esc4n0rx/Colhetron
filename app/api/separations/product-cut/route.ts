@@ -22,6 +22,14 @@ const cutRequestSchema = z.object({
   partial_cuts: z.array(partialStoreCutSchema).optional()
 })
 
+interface CutOperation {
+  store_code: string
+  previous_quantity: number
+  new_quantity: number
+  cut_quantity: number
+  operation_type: 'complete_cut' | 'partial_cut'
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verificar autenticação
@@ -43,7 +51,7 @@ export async function POST(request: NextRequest) {
     // Buscar separação ativa
     const { data: activeSeparation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
-      .select('id')
+      .select('id, type, date, file_name')
       .eq('user_id', decoded.userId)
       .eq('status', 'active')
       .single()
@@ -57,7 +65,7 @@ export async function POST(request: NextRequest) {
     // Buscar item da separação
     const { data: separationItem, error: itemError } = await supabaseAdmin
       .from('colhetron_separation_items')
-      .select('id, description')
+      .select('id, description, row_number, type_separation')
       .eq('separation_id', activeSeparation.id)
       .eq('material_code', validatedData.material_code)
       .single()
@@ -89,6 +97,7 @@ export async function POST(request: NextRequest) {
     let affectedStores = 0
     let totalCutQuantity = 0
     const updatesToExecute: Array<{ store_code: string, new_quantity: number }> = []
+    const cutOperations: CutOperation[] = []
 
     // Processar corte baseado no tipo
     if (validatedData.cut_type === 'all') {
@@ -98,6 +107,15 @@ export async function POST(request: NextRequest) {
           store_code: q.store_code,
           new_quantity: 0
         })
+        
+        cutOperations.push({
+          store_code: q.store_code,
+          previous_quantity: q.quantity,
+          new_quantity: 0,
+          cut_quantity: q.quantity,
+          operation_type: 'complete_cut'
+        })
+        
         totalCutQuantity += q.quantity
         affectedStores++
       })
@@ -118,6 +136,15 @@ export async function POST(request: NextRequest) {
             store_code: q.store_code,
             new_quantity: 0
           })
+          
+          cutOperations.push({
+            store_code: q.store_code,
+            previous_quantity: q.quantity,
+            new_quantity: 0,
+            cut_quantity: q.quantity,
+            operation_type: 'complete_cut'
+          })
+          
           totalCutQuantity += q.quantity
           affectedStores++
         }
@@ -148,6 +175,15 @@ export async function POST(request: NextRequest) {
             store_code: q.store_code,
             new_quantity: newQuantity
           })
+          
+          cutOperations.push({
+            store_code: q.store_code,
+            previous_quantity: q.quantity,
+            new_quantity: newQuantity,
+            cut_quantity: partialCut.quantity_to_cut,
+            operation_type: newQuantity === 0 ? 'complete_cut' : 'partial_cut'
+          })
+          
           totalCutQuantity += partialCut.quantity_to_cut
           affectedStores++
         }
@@ -193,20 +229,42 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Registrar atividade
+    // Registrar atividade com metadata detalhado
     await logActivity({
       userId: decoded.userId,
       action: 'Corte de produto realizado',
-      details: `Produto ${validatedData.material_code} cortado em ${affectedStores} loja(s) com total de ${totalCutQuantity} unidade(s)`,
+      details: `Produto ${validatedData.material_code} (${separationItem.description}) cortado em ${affectedStores} loja(s) com total de ${totalCutQuantity} unidade(s)`,
       type: 'separation',
       metadata: {
-        separationId: separationItem.id,
+        separationId: activeSeparation.id,
+        separationType: activeSeparation.type,
+        separationDate: activeSeparation.date,
+        separationFileName: activeSeparation.file_name,
         materialCode: validatedData.material_code,
+        materialDescription: separationItem.description,
+        materialRowNumber: separationItem.row_number,
+        materialTypeSeparation: separationItem.type_separation,
         cutType: validatedData.cut_type,
         totalCutQuantity,
         affectedStores,
-        reason: 'Solicitação manual via interface',
-        date: new Date().toISOString()
+        cutOperations,
+        storeCodesCut: cutOperations.map(op => op.store_code),
+        completeCuts: cutOperations.filter(op => op.operation_type === 'complete_cut').length,
+        partialCuts: cutOperations.filter(op => op.operation_type === 'partial_cut').length,
+        quantityDetails: {
+          beforeCut: cutOperations.reduce((sum, op) => sum + op.previous_quantity, 0),
+          afterCut: cutOperations.reduce((sum, op) => sum + op.new_quantity, 0),
+          totalCut: cutOperations.reduce((sum, op) => sum + op.cut_quantity, 0)
+        },
+        storeBreakdown: cutOperations.map(op => ({
+          storeCode: op.store_code,
+          before: op.previous_quantity,
+          after: op.new_quantity,
+          cut: op.cut_quantity,
+          type: op.operation_type
+        })),
+        timestamp: new Date().toISOString(),
+        reason: 'Solicitação manual via interface'
       }
     })
 
@@ -215,7 +273,8 @@ export async function POST(request: NextRequest) {
       message: `Corte executado com sucesso! ${totalCutQuantity} unidade(s) cortadas de ${affectedStores} loja(s)`,
       affected_stores: affectedStores,
       total_cut_quantity: totalCutQuantity,
-      material_code: validatedData.material_code
+      material_code: validatedData.material_code,
+      cut_operations: cutOperations
     })
 
   } catch (error) {

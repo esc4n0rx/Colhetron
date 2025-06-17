@@ -24,6 +24,10 @@ interface ReforcoProcessingResult {
   updatedItems: number
   newItems: number
   redistributedItems: number
+  processedMaterialCodes: string[]
+  newMaterialCodes: string[]
+  updatedMaterialCodes: string[]
+  redistributedMaterialCodes: string[]
 }
 
 export async function POST(request: NextRequest) {
@@ -123,7 +127,11 @@ export async function POST(request: NextRequest) {
           processedItems: reforcoResult.data.processedItems,
           updatedItems: reforcoResult.data.updatedItems,
           newItems: reforcoResult.data.newItems,
-          redistributedItems: reforcoResult.data.redistributedItems
+          redistributedItems: reforcoResult.data.redistributedItems,
+          processedMaterialCodes: reforcoResult.data.processedMaterialCodes,
+          newMaterialCodes: reforcoResult.data.newMaterialCodes,
+          updatedMaterialCodes: reforcoResult.data.updatedMaterialCodes,
+          redistributedMaterialCodes: reforcoResult.data.redistributedMaterialCodes
         }
       })
 
@@ -246,6 +254,12 @@ async function processReforco(params: {
     let newItems = 0
     let redistributedItems = 0
 
+    // Arrays para rastrear os códigos dos materiais por categoria
+    const processedMaterialCodes: string[] = []
+    const newMaterialCodes: string[] = []
+    const updatedMaterialCodes: string[] = []
+    const redistributedMaterialCodes: string[] = []
+
     // Processar cada material do reforço
     for (const material of processedData.materials) {
       try {
@@ -258,6 +272,7 @@ async function processReforco(params: {
           .single()
 
         let itemId: string
+        let isNewMaterial = false
 
         if (itemError || !existingItem) {
           // Material não existe na separação, criar novo
@@ -280,9 +295,12 @@ async function processReforco(params: {
 
           itemId = newItem.id
           newItems++
+          isNewMaterial = true
+          newMaterialCodes.push(material.code)
         } else {
           itemId = existingItem.id
           updatedItems++
+          updatedMaterialCodes.push(material.code)
         }
 
         // Buscar quantidades atuais do material por loja
@@ -304,6 +322,8 @@ async function processReforco(params: {
         // Processar quantidades do reforço para este material
         const materialQuantities = processedData.quantities.filter(q => q.materialIndex === processedData.materials.indexOf(material))
         
+        let hadRedistribution = false
+
         for (const reforcoQty of materialQuantities) {
           const currentQuantity = currentQuantitiesMap.get(reforcoQty.storeCode) || 0
           const reforcoQuantity = reforcoQty.quantity
@@ -320,6 +340,7 @@ async function processReforco(params: {
             // Antes tinha, agora não tem -> zerar (redistribuição)
             newQuantity = 0
             redistributedItems++
+            hadRedistribution = true
           } else {
             // Ambos são 0, manter 0 ou não existia
             newQuantity = 0
@@ -353,6 +374,13 @@ async function processReforco(params: {
           }
         }
 
+        // Adicionar aos arrays de rastreamento
+        processedMaterialCodes.push(material.code)
+        
+        if (hadRedistribution && !redistributedMaterialCodes.includes(material.code)) {
+          redistributedMaterialCodes.push(material.code)
+        }
+
         processedItems++
 
       } catch (error) {
@@ -378,7 +406,11 @@ async function processReforco(params: {
         processedItems,
         updatedItems,
         newItems,
-        redistributedItems
+        redistributedItems,
+        processedMaterialCodes,
+        newMaterialCodes,
+        updatedMaterialCodes,
+        redistributedMaterialCodes
       },
       error: null
     }
