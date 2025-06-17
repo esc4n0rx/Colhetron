@@ -1,5 +1,4 @@
 // hooks/useMediaAnalysisData.ts
-
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -14,6 +13,9 @@ export interface MediaAnalysisItem {
   diferencaCaixas: number
   mediaReal: number
   status: 'OK' | 'ATENÇÃO' | 'CRÍTICO'
+  forcedStatus?: boolean
+  forcedReason?: string
+  forcedAt?: string
   created_at: string
   updated_at: string
 }
@@ -61,6 +63,9 @@ export function useMediaAnalysisData() {
         diferencaCaixas: item.diferenca_caixas,
         mediaReal: item.media_real,
         status: item.status,
+        forcedStatus: item.forced_status || false,
+        forcedReason: item.forced_reason,
+        forcedAt: item.forced_at,
         created_at: item.created_at,
         updated_at: item.updated_at
       }))
@@ -173,6 +178,54 @@ export function useMediaAnalysisData() {
     }
   }, [])
 
+  const forceStatusOK = useCallback(async (itemId: string, reason?: string) => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) {
+        throw new Error('Token de autorização não encontrado')
+      }
+
+      const response = await fetch('/api/media-analysis/force-status', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          item_id: itemId,
+          reason: reason 
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Falha ao forçar status')
+      }
+
+      const result = await response.json()
+      
+      // Atualizar item específico no estado local
+      setData(prevData => 
+        prevData.map(item => 
+          item.id === itemId ? {
+            ...item,
+            status: 'OK' as const,
+            forcedStatus: true,
+            forcedReason: reason,
+            forcedAt: new Date().toISOString(),
+            updated_at: result.item.updated_at
+          } : item
+        )
+      )
+      
+      return result
+
+    } catch (err) {
+      console.error('Erro ao forçar status:', err)
+      throw err
+    }
+  }, [])
+
   const deleteItem = useCallback(async (id: string) => {
     try {
       const token = localStorage.getItem('colhetron_token')
@@ -239,6 +292,7 @@ export function useMediaAnalysisData() {
     fetchData,
     addItems,
     updateItem,
+    forceStatusOK,
     deleteItem,
     clearAllData,
   }
