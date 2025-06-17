@@ -16,22 +16,28 @@ export interface ActivityMetadata {
   reason?: string
   date?: string
   
-  // Novos campos para rastreamento específico de materiais no reforço
+  // Campos específicos para reforço
   processedMaterialCodes?: string[]
   newMaterialCodes?: string[]
   updatedMaterialCodes?: string[]
   redistributedMaterialCodes?: string[]
   
-  // Campos adicionais para cortes
+  // Campos específicos para corte
+  separationType?: string
+  separationDate?: string
+  separationFileName?: string
+  materialDescription?: string
+  materialRowNumber?: number
+  materialTypeSeparation?: string
   storeCodesCut?: string[]
   completeCuts?: number
   partialCuts?: number
   cutOperations?: Array<{
-    storeCode: string
-    before: number
-    after: number
-    cut: number
-    type: string
+    store_code: string
+    previous_quantity: number
+    new_quantity: number
+    cut_quantity: number
+    operation_type: string
   }>
   quantityDetails?: {
     beforeCut: number

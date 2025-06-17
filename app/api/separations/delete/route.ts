@@ -1,7 +1,8 @@
+// app/api/separations/delete/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-
+import { logActivity } from '@/lib/activity-logger'
 
 export async function DELETE(request: NextRequest) {
   try {
@@ -36,7 +37,7 @@ export async function DELETE(request: NextRequest) {
     // Verificar se a separação pertence ao usuário
     const { data: separation, error: checkError } = await supabaseAdmin
       .from('colhetron_separations')
-      .select('id, user_id, file_name')
+      .select('id, user_id, file_name, type, status')
       .eq('id', separationId)
       .eq('user_id', decoded.userId)
       .single()
@@ -63,9 +64,44 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // NOVO: Limpar completamente a tabela colhetron_media_analysis para o usuário
+    const { error: clearError } = await supabaseAdmin
+      .from('colhetron_media_analysis')
+      .delete()
+      .eq('user_id', decoded.userId)
+
+    if (clearError) {
+      console.error('Erro ao limpar análise de médias:', clearError)
+      // Log do erro mas não falha a operação principal
+      await logActivity({
+        userId: decoded.userId,
+        action: 'Erro ao limpar análise de médias',
+        details: `Erro durante exclusão da separação: ${clearError.message}`,
+        type: 'error'
+      })
+    } else {
+      console.log('✅ Tabela colhetron_media_analysis limpa com sucesso após exclusão')
+    }
+
+    // Registrar atividade
+    await logActivity({
+      userId: decoded.userId,
+      action: 'Separação deletada',
+      details: `Separação ${separation.type} (${separation.file_name}) deletada com sucesso. Análise de médias limpa.`,
+      type: 'separation',
+      metadata: {
+        separationId: separation.id,
+        fileName: separation.file_name,
+        type: separation.type,
+        status: separation.status,
+        mediaAnalysisCleared: clearError ? false : true
+      }
+    })
+
     return NextResponse.json({
       message: 'Separação deletada com sucesso',
-      fileName: separation.file_name
+      fileName: separation.file_name,
+      mediaAnalysisCleared: clearError ? false : true
     })
 
   } catch (error) {

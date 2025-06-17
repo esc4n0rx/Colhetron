@@ -51,24 +51,45 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
+    // NOVO: Limpar completamente a tabela colhetron_media_analysis para o usuário
+    const { error: clearError } = await supabaseAdmin
+      .from('colhetron_media_analysis')
+      .delete()
+      .eq('user_id', decoded.userId)
+
+    if (clearError) {
+      console.error('Erro ao limpar análise de médias:', clearError)
+      // Log do erro mas não falha a operação principal
+      await logActivity({
+        userId: decoded.userId,
+        action: 'Erro ao limpar análise de médias',
+        details: `Erro durante finalização da separação: ${clearError.message}`,
+        type: 'error'
+      })
+    } else {
+      console.log('✅ Tabela colhetron_media_analysis limpa com sucesso após finalização')
+    }
+
     // Registrar atividade
     await logActivity({
       userId: decoded.userId,
       action: 'Separação finalizada',
-      details: `Separação ${activeSeparation.type} finalizada com sucesso`,
+      details: `Separação ${activeSeparation.type} finalizada com sucesso. Análise de médias limpa.`,
       type: 'separation',
       metadata: {
         separationId: activeSeparation.id,
         type: activeSeparation.type,
         totalItems: activeSeparation.total_items,
         totalStores: activeSeparation.total_stores,
-        duration: calculateDuration(activeSeparation.created_at)
+        duration: calculateDuration(activeSeparation.created_at),
+        mediaAnalysisCleared: clearError ? false : true
       }
     })
 
     return NextResponse.json({
       message: 'Separação finalizada com sucesso',
-      separation: finalizedSeparation
+      separation: finalizedSeparation,
+      mediaAnalysisCleared: clearError ? false : true
     })
 
   } catch (error) {

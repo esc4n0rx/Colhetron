@@ -71,6 +71,39 @@ function isMaterialAffectedByReinforcement(
 }
 
 /**
+ * Verifica se uma loja específica foi afetada por um corte
+ */
+function isStoreAffectedByCut(
+  activity: UserActivity,
+  materialCode: string,
+  storeCode: string
+): boolean {
+  const metadata = activity.metadata
+
+  // Verificar se o material corresponde
+  if (metadata.materialCode !== materialCode) {
+    return false
+  }
+
+  // Verificar se a loja está nas operações de corte
+  if (metadata.storeCodesCut && metadata.storeCodesCut.includes(storeCode)) {
+    return true
+  }
+
+  // Verificar no breakdown das lojas se disponível
+  if (metadata.storeBreakdown) {
+    return metadata.storeBreakdown.some(breakdown => breakdown.storeCode === storeCode)
+  }
+
+  // Verificar nas operações de corte se disponível
+  if (metadata.cutOperations) {
+    return metadata.cutOperations.some(operation => operation.store_code === storeCode)
+  }
+
+  return false
+}
+
+/**
  * Filtra atividades relevantes para um item específico em uma loja específica
  */
 export function filterActivitiesForItem(
@@ -87,13 +120,14 @@ export function filterActivitiesForItem(
 
     // Para alterações manuais: verificar código do material e loja
     if (activity.action === 'Alteração de produto realizado') {
-      return activity.metadata.materialCode === materialCode ||
-             activity.metadata.storeCode === storeCode
+      return (activity.metadata.materialCode === materialCode && 
+              activity.metadata.storeCode === storeCode) ||
+             activity.metadata.materialCode === materialCode
     }
 
-    // Para cortes: verificar código do material
+    // Para cortes: verificar código do material E se a loja específica foi afetada
     if (activity.action === 'Corte de produto realizado') {
-      return activity.metadata.materialCode === materialCode
+      return isStoreAffectedByCut(activity, materialCode, storeCode)
     }
 
     // Para reforços: verificar se o material específico foi afetado
@@ -167,4 +201,58 @@ export function getAffectedMaterialsByActivity(activity: UserActivity): string[]
     default:
       return []
   }
+}
+
+/**
+ * Utilitário para debug - mostra quais lojas foram afetadas por um corte
+ */
+export function getAffectedStoresByCut(activity: UserActivity): string[] {
+  const metadata = activity.metadata
+
+  if (activity.action !== 'Corte de produto realizado') {
+    return []
+  }
+
+  // Priorizar storeCodesCut se disponível
+  if (metadata.storeCodesCut && metadata.storeCodesCut.length > 0) {
+    return metadata.storeCodesCut
+  }
+
+  // Usar storeBreakdown como fallback
+  if (metadata.storeBreakdown && metadata.storeBreakdown.length > 0) {
+    return metadata.storeBreakdown.map(breakdown => breakdown.storeCode)
+  }
+
+  // Usar cutOperations como último recurso
+  if (metadata.cutOperations && metadata.cutOperations.length > 0) {
+    return metadata.cutOperations.map(operation => operation.store_code)
+  }
+
+  return []
+}
+
+/**
+ * Utilitário para debug completo - mostra informações detalhadas de uma atividade
+ */
+export function debugActivity(activity: UserActivity): void {
+  if (process.env.NODE_ENV !== 'development') return
+
+  console.group(`🔍 Debug Activity: ${activity.action}`)
+  console.log('📋 Details:', activity.details)
+  console.log('📅 Created:', activity.created_at)
+  console.log('🏷️ Type:', activity.type)
+  
+  if (activity.action === 'Corte de produto realizado') {
+    console.log('🎯 Material:', activity.metadata.materialCode)
+    console.log('🏪 Lojas Afetadas:', getAffectedStoresByCut(activity))
+    console.log('📊 Cut Operations:', activity.metadata.cutOperations)
+  } else if (activity.action === 'Reforço carregado') {
+    console.log('📦 Materiais Processados:', getAffectedMaterialsByActivity(activity))
+  } else if (activity.action === 'Alteração de produto realizado') {
+    console.log('🎯 Material:', activity.metadata.materialCode)
+    console.log('🏪 Loja:', activity.metadata.storeCode)
+  }
+  
+  console.log('🔧 Metadata completo:', activity.metadata)
+  console.groupEnd()
 }
