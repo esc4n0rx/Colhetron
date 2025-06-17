@@ -18,7 +18,8 @@ import {
  Package, 
  PlusCircle, 
  CheckCircle, 
- Loader2 
+ Loader2,
+ FileText // Novo ícone para relatórios
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -90,7 +91,6 @@ export default function Header({
 
      if (response.ok) {
        toast.success('Separação finalizada com sucesso!')
-       // Callback para atualizar estado no componente principal
        onSeparationFinalized?.()
      } else {
        const error = await response.json()
@@ -167,6 +167,18 @@ export default function Header({
                Nova Separação
              </Button>
            )}
+
+           {/* NOVO BOTÃO DE RELATÓRIOS */}
+           <Button
+             onClick={() => onNavigate("relatorios")}
+             size="sm"
+             variant="outline"
+             className="border-purple-600 text-purple-400 hover:bg-purple-900/20 hover:text-purple-300"
+             aria-label="Acessar relatórios"
+           >
+             <FileText className="w-4 h-4 mr-2" />
+             Relatórios
+           </Button>
 
            {/* Menu items */}
            {menuItems.map((item) => (
@@ -249,6 +261,18 @@ export default function Header({
                )}
                
                <DropdownMenuSeparator className="bg-gray-700" />
+               
+               {/* NOVO ITEM RELATÓRIOS NO MOBILE */}
+               <DropdownMenuItem
+                 onClick={() => {
+                   onNavigate("relatorios");
+                   setIsMenuOpen(false);
+                 }}
+                 className="text-purple-400 hover:text-purple-300 focus:bg-purple-900/50"
+               >
+                 <FileText className="w-4 h-4 mr-2" />
+                 Relatórios
+               </DropdownMenuItem>
                
                {/* Menu items mobile */}
                {menuItems.map((item) => (

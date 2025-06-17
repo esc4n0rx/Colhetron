@@ -1,3 +1,4 @@
+// app/dashboard/page.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -18,6 +19,7 @@ import ConfiguracoesPage from "@/components/pages/ConfiguracoesPage"
 import SobrePage from "@/components/pages/SobrePage"
 import AtualizacoesPage from "@/components/pages/AtualizacoesPage"
 import PerfilPage from "@/components/pages/PerfilPage"
+import RelatoriosPage from "@/components/pages/RelatoriosPage" // NOVA IMPORTAÇÃO
 import { Settings, Info, Download } from 'lucide-react'
 
 const tabs = [
@@ -42,59 +44,33 @@ export default function DashboardPage() {
   const menuItems = [
     { id: "configuracoes", label: "Configurações", icon: Settings },
     { id: "sobre", label: "Sobre", icon: Info },
-    { id: "atualizacoes", label: "Atualizações", icon: Download }
+    { id: "atualizacoes", label: "Atualizações", icon: Download },
   ]
 
-  // Função para lidar com a finalização da separação
-  const handleSeparationFinalized = async () => {
-    try {
-      // Se tiver função no context, use ela
-      if (fetchActiveSeparation) {
-        await fetchActiveSeparation()
-      } else {
-        // Fallback: recarregar os dados manualmente
-        const token = localStorage.getItem('colhetron_token')
-        if (token) {
-          const response = await fetch('/api/separations/active', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-          // Se não tiver como atualizar o context, pode fazer um reload simples
-          if (response.ok) {
-            window.location.reload()
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao atualizar separação:', error)
-      // Em caso de erro, recarregar a página
-      window.location.reload()
-    }
-  }
-
-  // Proteção de rota
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/')
     }
   }, [user, authLoading, router])
 
-  // Loading de autenticação
+  const handleSeparationFinalized = () => {
+    fetchActiveSeparation()
+  }
+
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
           className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
         />
+        <span className="ml-3 text-white">Carregando...</span>
       </div>
     )
   }
 
-  // Se não estiver autenticado, não renderizar nada (redirecionamento em andamento)
-  if (!user) {
-    return null
-  }
+  if (!user) return null
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -125,6 +101,8 @@ export default function DashboardPage() {
         return <AtualizacoesPage onBack={() => setCurrentPage("dashboard")} />
       case "perfil":
         return <PerfilPage onBack={() => setCurrentPage("dashboard")} />
+      case "relatorios": // NOVA PÁGINA
+        return <RelatoriosPage onBack={() => setCurrentPage("dashboard")} />
       default:
         return (
           <div className="space-y-6">
