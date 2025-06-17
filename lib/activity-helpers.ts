@@ -51,6 +51,26 @@ export function getActivityColorClasses(activityType: ItemActivityType): string 
 }
 
 /**
+ * Verifica se um material foi afetado por uma atividade de reforço específica
+ */
+function isMaterialAffectedByReinforcement(
+  activity: UserActivity,
+  materialCode: string
+): boolean {
+  const metadata = activity.metadata
+
+  // Verificar nos arrays de códigos de materiais processados
+  const affectedCodes = [
+    ...(metadata.processedMaterialCodes || []),
+    ...(metadata.newMaterialCodes || []),
+    ...(metadata.updatedMaterialCodes || []),
+    ...(metadata.redistributedMaterialCodes || [])
+  ]
+
+  return affectedCodes.includes(materialCode)
+}
+
+/**
  * Filtra atividades relevantes para um item específico em uma loja específica
  */
 export function filterActivitiesForItem(
@@ -76,9 +96,9 @@ export function filterActivitiesForItem(
       return activity.metadata.materialCode === materialCode
     }
 
-    // Para reforços: sempre incluir (afeta todos os itens)
+    // Para reforços: verificar se o material específico foi afetado
     if (activity.action === 'Reforço carregado') {
-      return true
+      return isMaterialAffectedByReinforcement(activity, materialCode)
     }
 
     return false
@@ -121,4 +141,30 @@ export function createActivityStatusMap(
   })
 
   return statusMap
+}
+
+/**
+ * Utilitário para debug - mostra quais materiais foram afetados por uma atividade
+ */
+export function getAffectedMaterialsByActivity(activity: UserActivity): string[] {
+  const metadata = activity.metadata
+
+  switch (activity.action) {
+    case 'Alteração de produto realizado':
+      return metadata.materialCode ? [metadata.materialCode] : []
+    
+    case 'Corte de produto realizado':
+      return metadata.materialCode ? [metadata.materialCode] : []
+    
+    case 'Reforço carregado':
+      return [
+        ...(metadata.processedMaterialCodes || []),
+        ...(metadata.newMaterialCodes || []),
+        ...(metadata.updatedMaterialCodes || []),
+        ...(metadata.redistributedMaterialCodes || [])
+      ]
+    
+    default:
+      return []
+  }
 }

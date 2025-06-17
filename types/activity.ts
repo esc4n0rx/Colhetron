@@ -15,6 +15,37 @@ export interface ActivityMetadata {
   fileName?: string
   reason?: string
   date?: string
+  
+  // Novos campos para rastreamento específico de materiais no reforço
+  processedMaterialCodes?: string[]
+  newMaterialCodes?: string[]
+  updatedMaterialCodes?: string[]
+  redistributedMaterialCodes?: string[]
+  
+  // Campos adicionais para cortes
+  storeCodesCut?: string[]
+  completeCuts?: number
+  partialCuts?: number
+  cutOperations?: Array<{
+    storeCode: string
+    before: number
+    after: number
+    cut: number
+    type: string
+  }>
+  quantityDetails?: {
+    beforeCut: number
+    afterCut: number
+    totalCut: number
+  }
+  storeBreakdown?: Array<{
+    storeCode: string
+    before: number
+    after: number
+    cut: number
+    type: string
+  }>
+  timestamp?: string
 }
 
 export interface UserActivity {
