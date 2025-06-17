@@ -16,6 +16,9 @@ export interface MediaAnalysisItem {
   forcedStatus?: boolean
   forcedReason?: string
   forcedAt?: string
+  customMedia?: boolean 
+  customMediaValue?: number 
+  customMediaUpdatedAt?: string
   created_at: string
   updated_at: string
 }
@@ -66,6 +69,9 @@ export function useMediaAnalysisData() {
         forcedStatus: item.forced_status || false,
         forcedReason: item.forced_reason,
         forcedAt: item.forced_at,
+        customMedia: item.custom_media || false,
+        customMediaValue: item.custom_media_value,
+        customMediaUpdatedAt: item.custom_media_updated_at,
         created_at: item.created_at,
         updated_at: item.updated_at
       }))
@@ -281,9 +287,61 @@ export function useMediaAnalysisData() {
     }
   }, [])
 
+  const updateCustomMedia = useCallback(async (itemId: string, customMedia: number) => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) {
+        throw new Error('Token de autorização não encontrado')
+      }
+
+      const response = await fetch('/api/media-analysis/update-custom-media', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          item_id: itemId,
+          custom_media: customMedia 
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Falha ao atualizar média personalizada')
+      }
+
+      const result = await response.json()
+      
+      setData(prevData => 
+        prevData.map(item => 
+          item.id === itemId ? {
+            ...item,
+            mediaSistema: customMedia,
+            customMedia: true,
+            customMediaValue: customMedia,
+            customMediaUpdatedAt: new Date().toISOString(),
+            status: result.item.status,
+            mediaReal: result.item.media_real,
+            diferencaCaixas: result.item.diferenca_caixas,
+            updated_at: result.item.updated_at
+          } : item
+        )
+      )
+      
+      return result
+
+    } catch (err) {
+      console.error('Erro ao atualizar média personalizada:', err)
+      throw err
+    }
+  }, [])
+
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  
 
   return {
     data,
@@ -292,6 +350,7 @@ export function useMediaAnalysisData() {
     fetchData,
     addItems,
     updateItem,
+    updateCustomMedia,
     forceStatusOK,
     deleteItem,
     clearAllData,

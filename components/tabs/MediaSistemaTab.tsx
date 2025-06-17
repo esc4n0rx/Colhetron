@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMediaAnalysisData } from '@/hooks/useMediaAnalysisData'
+import CustomMediaModal from '@/components/modals/CustomMediaModal'
 import PasteDataModal from '@/components/modals/PasteDataModal'
 import AddItemModal from '@/components/modals/AddItemModal'
 import ForceStatusModal from '@/components/modals/ForceStatusModal'
@@ -41,6 +42,9 @@ interface MediaItem {
   status?: string
   forcedStatus?: boolean
   forcedReason?: string
+  customMedia?: boolean  
+  customMediaValue?: number  
+  customMediaUpdatedAt?: string
 }
 
 interface SeparationInfo {
@@ -56,11 +60,21 @@ export default function MediaSistemaTab() {
   const [searchTerm, setSearchTerm] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
+  const [selectedItemForCustomMedia, setSelectedItemForCustomMedia] = useState<{
+    id: string
+    codigo: string
+    material: string
+    mediaSistema: number
+    quantidadeKg: number
+    quantidadeCaixas: number
+    isCustomMedia?: boolean
+  } | null>(null)
   
   // Estados dos modais
   const [showPasteDataModal, setShowPasteDataModal] = useState(false)
   const [showAddItemModal, setShowAddItemModal] = useState(false)
   const [showForceStatusModal, setShowForceStatusModal] = useState(false)
+  const [showCustomMediaModal, setShowCustomMediaModal] = useState(false) 
   const [selectedItemForForce, setSelectedItemForForce] = useState<{
     id: string
     codigo: string
@@ -68,12 +82,39 @@ export default function MediaSistemaTab() {
     status: string
   } | null>(null)
 
-  // Hook de dados
-  const { forceStatusOK } = useMediaAnalysisData()
+
+  const { forceStatusOK, updateCustomMedia } = useMediaAnalysisData()
 
   useEffect(() => {
     fetchMediaData()
   }, [])
+
+  const handleCustomMediaClick = (item: MediaItem) => {
+    setSelectedItemForCustomMedia({
+      id: String(item.id),
+      codigo: item.codigo,
+      material: item.material,
+      mediaSistema: item.media_sistema,
+      quantidadeKg: item.quantidade_kg,
+      quantidadeCaixas: item.quantidade_caixas,
+      isCustomMedia: item.customMedia || false
+    })
+    setShowCustomMediaModal(true)
+  }
+
+  const handleCustomMediaConfirm = async (newMedia: number) => {
+    if (!selectedItemForCustomMedia) return
+
+    try {
+      await updateCustomMedia(selectedItemForCustomMedia.id, newMedia)
+      toast.success('Média personalizada atualizada com sucesso!')
+      await fetchMediaData() // Recarregar dados
+    } catch (error) {
+      console.error('Erro ao atualizar média personalizada:', error)
+      toast.error('Erro ao atualizar média personalizada')
+      throw error // Re-throw para o modal tratar
+    }
+  }
 
   const fetchMediaData = async () => {
     try {
@@ -444,9 +485,27 @@ export default function MediaSistemaTab() {
                      <td className="p-4 text-right text-white font-medium">
                        {item.quantidade_caixas}
                      </td>
-                     <td className="p-4 text-right text-blue-400 font-medium">
-                       {item.media_sistema.toFixed(2)}
-                     </td>
+                      <td className="p-4 text-right">
+                        <div className="flex items-center justify-end space-x-2">
+                          <button
+                            onClick={() => handleCustomMediaClick(item)}
+                            className="group flex items-center space-x-1 hover:bg-gray-700 rounded px-2 py-1 transition-colors"
+                            title="Clique para editar média personalizada"
+                          >
+                            <span className={`font-medium ${
+                              item.customMedia ? 'text-purple-400' : 'text-blue-400'
+                            }`}>
+                              {item.media_sistema.toFixed(2)}
+                            </span>
+                            {item.customMedia && (
+                              <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-xs">
+                                Custom
+                              </Badge>
+                            )}
+                            <Settings className="w-3 h-3 text-gray-500 group-hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        </div>
+                      </td>
                      <td className="p-4 text-right text-green-400 font-medium">
                        {item.estoque_atual}
                      </td>
@@ -521,6 +580,15 @@ export default function MediaSistemaTab() {
        onConfirm={handleForceStatusConfirm}
        item={selectedItemForForce}
      />
+     <CustomMediaModal
+        isOpen={showCustomMediaModal}
+        onClose={() => {
+          setShowCustomMediaModal(false)
+          setSelectedItemForCustomMedia(null)
+        }}
+        onConfirm={handleCustomMediaConfirm}
+        item={selectedItemForCustomMedia}
+      />
    </motion.div>
  )
 }
