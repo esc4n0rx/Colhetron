@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { usePedidosData } from '@/hooks/usePedidosData'
 import { useMaterialCategories } from '@/hooks/useMaterialCategories'
 import CorteModal from '@/components/modals/CorteModal'
+import { getActivityColorClasses } from '@/lib/activity-helpers'
+import { ItemActivityType } from '@/types/activity'
 
 // --- INTERFACES E TIPOS ---
 
@@ -28,6 +30,7 @@ interface EditableInputProps {
   value: number
   onSave: (value: number) => void
   disabled?: boolean
+  activityType?: ItemActivityType
 }
 
 interface EditableSelectProps {
@@ -130,7 +133,7 @@ function ReforcoUploadModal({ isOpen, onClose, onUpload, isUploading }: ReforcoU
 
 // --- COMPONENTE EDITÁVEL INPUT ---
 
-function EditableInput({ value, onSave, disabled }: EditableInputProps) {
+function EditableInput({ value, onSave, disabled, activityType = 'default' }: EditableInputProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [tempValue, setTempValue] = useState(value.toString())
 
@@ -149,35 +152,46 @@ function EditableInput({ value, onSave, disabled }: EditableInputProps) {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      handleSave()
+      const numValue = parseInt(tempValue) || 0
+      onSave(numValue)
+      setIsEditing(false)
     } else if (e.key === 'Escape') {
-      handleCancel()
+      setTempValue(value.toString())
+      setIsEditing(false)
     }
   }
 
-  if (isEditing) {
+  const handleBlur = () => {
+    setTempValue(value.toString())
+    setIsEditing(false)
+  }
+
+ if (isEditing) {
     return (
       <Input
-        type="number"
         value={tempValue}
         onChange={(e) => setTempValue(e.target.value)}
-        onBlur={handleSave}
         onKeyDown={handleKeyDown}
-        className="w-full h-5 text-[10px] bg-gray-800 border-blue-500 text-white p-1"
+        onBlur={handleBlur}
+        className="w-16 h-6 text-center text-xs bg-gray-800 border-blue-500 text-white"
         autoFocus
         disabled={disabled}
       />
     )
   }
 
+  const colorClasses = value > 0 
+    ? getActivityColorClasses(activityType)
+    : "text-gray-500"
+
   return (
     <div
       onClick={() => !disabled && setIsEditing(true)}
-      className={`w-full h-5 flex items-center justify-center cursor-pointer hover:bg-gray-700 rounded text-[10px] font-mono ${
+      className={`w-16 h-6 flex items-center justify-center cursor-pointer hover:bg-gray-700 rounded text-xs ${colorClasses} ${
         disabled ? 'opacity-50 cursor-not-allowed' : ''
-      } ${value > 0 ? 'text-green-400 font-semibold' : 'text-gray-400'}`}
+      }`}
     >
-      {value || '0'}
+      {value || 0}
     </div>
   )
 }
@@ -263,6 +277,7 @@ export default function PedidosTab() {
     updateQuantity, 
     updateItemType,
     uploadReforco,
+    getItemActivityStatus,
     refetch
   } = usePedidosData()
 
@@ -357,7 +372,6 @@ export default function PedidosTab() {
       transition={{ duration: 0.5 }}
       className="space-y-4"
     >
-      {/* Cabeçalho com controles */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white apple-font">Pedidos</h2>
@@ -373,7 +387,6 @@ export default function PedidosTab() {
             <Scissors className="w-4 h-4 mr-2" />
             Corte de Produto
           </Button>
-          {/* Botão de reforço corrigido */}
           <Button 
             onClick={() => setIsReforcoModalOpen(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -410,8 +423,6 @@ export default function PedidosTab() {
           </Select>
         </div>
       </div>
-
-      {/* Error state */}
       {error && (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
@@ -486,6 +497,7 @@ export default function PedidosTab() {
                           value={Number(item[loja] || 0)}
                           onSave={(value) => updateQuantity(item.id, loja, value)}
                           disabled={isLoading}
+                          activityType={getItemActivityStatus(item.id, loja)?.activityType || 'default'}
                         />
                       </TableCell>
                     ))}

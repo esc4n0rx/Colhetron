@@ -105,6 +105,7 @@ export async function GET(request: NextRequest) {
     })
 
     return NextResponse.json({ 
+      separationId: separation.id,
       data: formattedData,
       stores: uniqueStores 
     })

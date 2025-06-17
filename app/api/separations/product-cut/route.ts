@@ -200,6 +200,7 @@ export async function POST(request: NextRequest) {
       details: `Produto ${validatedData.material_code} cortado em ${affectedStores} loja(s) com total de ${totalCutQuantity} unidade(s)`,
       type: 'separation',
       metadata: {
+        separationId: separationItem.id,
         materialCode: validatedData.material_code,
         cutType: validatedData.cut_type,
         totalCutQuantity,

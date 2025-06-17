@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logActivity } from '@/lib/activity-logger'
 
 export async function PUT(request: NextRequest) {
   try {
@@ -149,6 +150,21 @@ export async function PUT(request: NextRequest) {
       }
       // Se não existe registro e quantidade é 0, não precisa fazer nada
     }
+
+    await logActivity({
+          userId: decoded.userId,
+          action: 'Alteração de produto realizado',
+          details: `Quantidade do item ${itemId.quantidade} na loja ${itemId.loja} atualizada para ${quantity}`,
+          type: 'separation',
+          metadata: {
+            quantity: quantity,
+            storeCode: storeCode,
+            separationItemId: itemId.id,
+            separationId: separation.id,
+            reason: 'Alteração de quantidade manual via interface',
+            date: new Date().toISOString()
+          }
+        })
 
     return NextResponse.json({ 
       message: 'Quantidade atualizada com sucesso' 
