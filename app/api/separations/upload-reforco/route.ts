@@ -1,4 +1,4 @@
-// app/api/separations/upload-reforco/route.ts
+
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -32,7 +32,7 @@ interface ReforcoProcessingResult {
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticação
+
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Processar dados do formulário
+
     const formData = await request.formData()
     const file = formData.get('file') as File
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar arquivo Excel
+
     if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
       return NextResponse.json(
         { error: 'Apenas arquivos Excel (.xlsx, .xls) ou CSV são aceitos' },
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar se há uma separação ativa para o usuário
+
     const { data: activeSeparation, error: separationError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id, type, date')
@@ -85,11 +85,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Converter arquivo para buffer
+
     const fileBuffer = await file.arrayBuffer()
     const uint8Array = new Uint8Array(fileBuffer)
 
-    // Processar planilha Excel/CSV
+
     let processedData: ProcessedReforcoData
     try {
       processedData = await processReforcoFile(uint8Array)
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Processar reforço na separação ativa
+
     const reforcoResult = await processReforco({
         userId: decoded.userId,
         separationId: activeSeparation.id,
@@ -134,10 +134,29 @@ export async function POST(request: NextRequest) {
           redistributedMaterialCodes: reforcoResult.data.redistributedMaterialCodes
         }
       })
+    
+    // --- INÍCIO DA NOVA LÓGICA ---
+    // Salvar os dados processados para impressão futura
+    const { data: reinforcementPrint, error: printSaveError } = await supabaseAdmin
+      .from('colhetron_reinforcement_prints')
+      .insert({
+        separation_id: activeSeparation.id,
+        user_id: decoded.userId,
+        file_name: file.name,
+        data: processedData, 
+      })
+      .select('id')
+      .single()
+
+    if (printSaveError) {
+      console.error('Erro ao salvar dados de reforço para impressão:', printSaveError)
+    }
+    // --- FIM DA NOVA LÓGICA ---
 
     return NextResponse.json({
       success: true,
       message: `Reforço processado com sucesso! ${reforcoResult.data.processedItems} materiais processados.`,
+      reinforcementPrintId: reinforcementPrint?.id || null, // Retorna o ID para o frontend
       ...reforcoResult.data
     })
 
@@ -163,8 +182,8 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
   const stores: string[] = []
   const quantities: ProcessedReforcoData['quantities'] = []
 
-  // Extrair nomes das lojas da primeira linha (C1 até BL1)
-  for (let col = 2; col <= range.e.c; col++) { // Começa na coluna C (índice 2)
+
+  for (let col = 2; col <= range.e.c; col++) { 
     const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
     const cell = worksheet[cellAddress]
     
@@ -173,11 +192,11 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
     }
   }
 
-  // Processar dados dos materiais (a partir da linha 2)
-  for (let row = 1; row <= Math.min(range.e.r, 65); row++) { // Até linha 65 como especificado
-    // Coluna A - Material Code
+
+  for (let row = 1; row <= Math.min(range.e.r, 65); row++) { 
+
     const materialCodeCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
-    // Coluna B - Description
+
     const descriptionCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 1 })]
 
     if (materialCodeCell && materialCodeCell.v && descriptionCell && descriptionCell.v) {
@@ -189,10 +208,10 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
         materials.push({
           code: materialCode,
           description: description,
-          rowNumber: row + 1 // +1 para linha real do Excel
+          rowNumber: row + 1 
         })
 
-        // Extrair quantidades para cada loja (incluindo quantidades 0 para redistribuição)
+
         for (let col = 2; col < 2 + stores.length; col++) {
           const quantityCell = worksheet[XLSX.utils.encode_cell({ r: row, c: col })]
           const storeCode = stores[col - 2]
@@ -203,7 +222,6 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
             if (isNaN(quantity)) quantity = 0
           }
           
-          // Adicionar todas as quantidades (inclusive 0) para processar redistribuição
           quantities.push({
             materialIndex,
             storeCode,
@@ -234,7 +252,6 @@ async function processReforco(params: {
   const { userId, separationId, processedData, fileName } = params
 
   try {
-    // Buscar cadastro de materiais do usuário
     const { data: userMaterials, error: materialsError } = await supabaseAdmin
       .from('colhetron_materiais')
       .select('material, diurno')
@@ -254,16 +271,14 @@ async function processReforco(params: {
     let newItems = 0
     let redistributedItems = 0
 
-    // Arrays para rastrear os códigos dos materiais por categoria
     const processedMaterialCodes: string[] = []
     const newMaterialCodes: string[] = []
     const updatedMaterialCodes: string[] = []
     const redistributedMaterialCodes: string[] = []
 
-    // Processar cada material do reforço
+
     for (const material of processedData.materials) {
       try {
-        // Verificar se o material já existe na separação ativa
         const { data: existingItem, error: itemError } = await supabaseAdmin
           .from('colhetron_separation_items')
           .select('id')
@@ -303,7 +318,6 @@ async function processReforco(params: {
           updatedMaterialCodes.push(material.code)
         }
 
-        // Buscar quantidades atuais do material por loja
         const { data: currentQuantities, error: quantitiesError } = await supabaseAdmin
           .from('colhetron_separation_quantities')
           .select('store_code, quantity')
@@ -319,7 +333,6 @@ async function processReforco(params: {
           currentQuantitiesMap.set(q.store_code, q.quantity)
         })
 
-        // Processar quantidades do reforço para este material
         const materialQuantities = processedData.quantities.filter(q => q.materialIndex === processedData.materials.indexOf(material))
         
         let hadRedistribution = false
@@ -329,26 +342,24 @@ async function processReforco(params: {
           const reforcoQuantity = reforcoQty.quantity
           let newQuantity = 0
 
-          // Aplicar regras de negócio
+          // Aplicar regras de negócio para atualizar a quantidade
           if (currentQuantity === 0 && reforcoQuantity > 0) {
-            // Não tinha separação ativa, adicionar
             newQuantity = reforcoQuantity
           } else if (currentQuantity > 0 && reforcoQuantity > 0) {
-            // Já tinha quantidade, somar
+
             newQuantity = currentQuantity + reforcoQuantity
           } else if (currentQuantity > 0 && reforcoQuantity === 0) {
-            // Antes tinha, agora não tem -> zerar (redistribuição)
             newQuantity = 0
             redistributedItems++
             hadRedistribution = true
           } else {
-            // Ambos são 0, manter 0 ou não existia
+
             newQuantity = 0
           }
 
-          // Atualizar ou inserir quantidade
+
           if (currentQuantitiesMap.has(reforcoQty.storeCode)) {
-            // Atualizar quantidade existente
+
             const { error: updateError } = await supabaseAdmin
               .from('colhetron_separation_quantities')
               .update({ quantity: newQuantity })
@@ -359,7 +370,7 @@ async function processReforco(params: {
               console.error(`Erro ao atualizar quantidade ${material.code}-${reforcoQty.storeCode}:`, updateError)
             }
           } else if (newQuantity > 0) {
-            // Inserir nova quantidade (só se > 0)
+
             const { error: insertError } = await supabaseAdmin
               .from('colhetron_separation_quantities')
               .insert([{
@@ -374,7 +385,7 @@ async function processReforco(params: {
           }
         }
 
-        // Adicionar aos arrays de rastreamento
+
         processedMaterialCodes.push(material.code)
         
         if (hadRedistribution && !redistributedMaterialCodes.includes(material.code)) {
@@ -389,7 +400,6 @@ async function processReforco(params: {
       }
     }
 
-    // Atualizar totais da separação
     const { error: updateSeparationError } = await supabaseAdmin
       .from('colhetron_separations')
       .update({

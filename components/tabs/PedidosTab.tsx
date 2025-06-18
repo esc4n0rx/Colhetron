@@ -11,7 +11,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Search, Filter, Loader2, Upload, AlertCircle, Scissors } from 'lucide-react'
+import { Search, Filter, Loader2, Upload, AlertCircle, Scissors, Printer } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -20,6 +20,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { usePedidosData } from '@/hooks/usePedidosData'
 import { useMaterialCategories } from '@/hooks/useMaterialCategories'
 import CorteModal from '@/components/modals/CorteModal'
+// --- NOVA IMPORTAÇÃO DO MODAL DE IMPRESSÃO ---
+import ReinforcementPrintModal from '@/components/modals/ReinforcementPrintModal'
 import { getActivityColorClasses } from '@/lib/activity-helpers'
 import { ItemActivityType } from '@/types/activity'
 
@@ -27,6 +29,7 @@ import { ItemActivityType } from '@/types/activity'
 interface PedidoItem {
   id: string
   tipoSepar: string
+  calibre: string
   codigo: string
   descricao: string
   [key: string]: string | number
@@ -53,7 +56,7 @@ type ColumnWidths = {
 interface ReforcoUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpload: (file: File) => void;
+  onUpload: (file: File) => Promise<any>; // Modificado para retornar a resposta da API
   isUploading: boolean;
 }
 
@@ -67,9 +70,9 @@ function ReforcoUploadModal({ isOpen, onClose, onUpload, isUploading }: ReforcoU
     }
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (selectedFile) {
-      onUpload(selectedFile);
+      await onUpload(selectedFile); // A lógica de fechar será tratada no componente pai
       setSelectedFile(null);
     }
   };
@@ -268,6 +271,9 @@ export default function PedidosTab() {
   const [tableScale, setTableScale] = useState(1.0);
   const TABLE_SCALE_KEY = 'pedidos-table-scale';
 
+  // --- NOVA LÓGICA DE ESTADO PARA O MODAL DE IMPRESSÃO ---
+  const [isReinforcementModalOpen, setIsReinforcementModalOpen] = useState(false)
+
   const { 
     pedidos, 
     lojas, 
@@ -277,6 +283,7 @@ export default function PedidosTab() {
     updateItemType,
     uploadReforco,
     getItemActivityStatus,
+    activeSeparationId, // Precisamos do ID da separação ativa
     refetch
   } = usePedidosData()
 
@@ -322,9 +329,16 @@ export default function PedidosTab() {
   const handleReforcoUpload = async (file: File) => {
     setIsUploadingReforco(true)
     try {
-      await uploadReforco(file)
-      toast.success('Reforço carregado com sucesso!')
-      setIsReforcoModalOpen(false)
+      const result = await uploadReforco(file)
+      if (result.success) {
+        toast.success('Reforço carregado com sucesso!')
+        setIsReforcoModalOpen(false)
+        // --- NOVA LÓGICA ---
+        // Abrir o modal de impressão após o sucesso do upload
+        setIsReinforcementModalOpen(true) 
+      } else {
+        throw new Error(result.error)
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar reforço'
       toast.error(errorMessage)
@@ -575,6 +589,13 @@ export default function PedidosTab() {
         onClose={() => setIsReforcoModalOpen(false)}
         onUpload={handleReforcoUpload}
         isUploading={isUploadingReforco}
+      />
+
+      {/* --- NOVO MODAL DE IMPRESSÃO DE REFORÇO --- */}
+      <ReinforcementPrintModal
+        isOpen={isReinforcementModalOpen}
+        onClose={() => setIsReinforcementModalOpen(false)}
+        separationId={activeSeparationId}
       />
     </motion.div>
   )

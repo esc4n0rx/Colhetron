@@ -1,10 +1,12 @@
+// components/pages/RelatoriosPage.tsx
 "use client"
 
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   ArrowLeft, Filter, Download, Eye, Search, Calendar, Package, 
-  FileText, RotateCcw, Activity, Scissors, Upload, PenSquare, Info 
+  FileText, RotateCcw, Activity, Scissors, Upload, PenSquare, Info,
+  Loader2, Layers
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,9 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { toast } from 'sonner'
 import { useRelatorios } from '@/hooks/useRelatorios'
 import { ReportFilters } from '@/types/relatorios'
 import { UserActivity } from '@/types/activity'
+// --- NOVA IMPORTAÇÃO ---
+import ReinforcementDetailsModal from '../modals/ReinforcementDetailsModal'
+
 
 interface RelatoriosPageProps {
   onBack: () => void
@@ -39,6 +45,13 @@ const itemVariants = {
   },
 };
 
+// --- NOVA INTERFACE ---
+interface Reinforcement {
+  file_name: string;
+  created_at: string;
+  data: any;
+}
+
 export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
   const {
     separations,
@@ -59,6 +72,12 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
   })
   const [searchTerm, setSearchTerm] = useState('')
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
+  
+  // --- NOVOS ESTADOS ---
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isReinforcementModalOpen, setIsReinforcementModalOpen] = useState(false);
+  const [reinforcementDetails, setReinforcementDetails] = useState<Reinforcement[]>([]);
+  const [isFetchingReinforcements, setIsFetchingReinforcements] = useState(false);
 
   const handleFilterChange = (key: keyof ReportFilters, value: string | undefined) => {
     const newFilters = { ...filters, [key]: value }
@@ -76,7 +95,7 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
     const apiFilters: ReportFilters = {
       ...filters,
       type: filters.type as "SP" | "ES" | "RJ" | undefined,
-      status: filters.status as "active" | "completed" | undefined,
+      status: filters.status as "completed" | "active" | undefined,
       dateFrom: filters.dateFrom,
       dateTo: filters.dateTo
     }
@@ -99,6 +118,65 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
     setSearchTerm('')
     fetchSeparations({ type: undefined, status: undefined, dateFrom: '', dateTo: '' }, 1)
   }
+
+  // --- NOVA FUNÇÃO DE DOWNLOAD ---
+  const handleDownload = async (separationId: string) => {
+    setIsDownloading(true);
+    toast.info('Gerando seu relatório Excel...');
+    try {
+      const token = localStorage.getItem('colhetron_token');
+      const response = await fetch(`/api/relatorios/separations/${separationId}/download`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Falha ao gerar o arquivo');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `relatorio_separacao_${separationId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Download concluído!');
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      toast.error(`Erro no download: ${errorMessage}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // --- NOVA FUNÇÃO PARA VISUALIZAR REFORÇOS ---
+  const handleViewReinforcements = async (separationId: string) => {
+    setIsFetchingReinforcements(true);
+    try {
+      const token = localStorage.getItem('colhetron_token');
+      const response = await fetch(`/api/relatorios/separations/${separationId}/reinforcements`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao buscar reforços');
+      }
+
+      const data = await response.json();
+      setReinforcementDetails(data);
+      setIsReinforcementModalOpen(true);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      toast.error(`Erro ao buscar reforços: ${errorMessage}`);
+    } finally {
+      setIsFetchingReinforcements(false);
+    }
+  };
 
   const filteredSeparations = useMemo(() => {
     if (!searchTerm) return separations
@@ -464,9 +542,7 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
             </div>
           ) : selectedSeparation ? (
             <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
-
               <div className="lg:col-span-2 overflow-y-auto space-y-6 pr-4">
-
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Tipo</div><div className="font-medium text-white">{getTypeBadge(selectedSeparation.type)}</div></CardContent></Card>
                   <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Status</div><div className="font-medium text-white">{getStatusBadge(selectedSeparation.status)}</div></CardContent></Card>
@@ -474,6 +550,18 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
                   <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Arquivo</div><div className="font-medium text-white text-sm">{selectedSeparation.file_name}</div></CardContent></Card>
                   <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Total de Itens</div><div className="font-medium text-white">{selectedSeparation.total_items}</div></CardContent></Card>
                   <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Total de Lojas</div><div className="font-medium text-white">{selectedSeparation.total_stores}</div></CardContent></Card>
+                </div>
+                
+                {/* --- NOVOS BOTÕES DE AÇÃO --- */}
+                <div className="flex items-center gap-4 py-4 border-y border-gray-700">
+                  <Button onClick={() => handleDownload(selectedSeparation.id)} disabled={isDownloading} className="bg-green-600 hover:bg-green-700">
+                    {isDownloading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+                    Baixar Relatório
+                  </Button>
+                  <Button onClick={() => handleViewReinforcements(selectedSeparation.id)} disabled={isFetchingReinforcements} variant="outline" className="border-blue-600 text-blue-400 hover:bg-blue-900/20">
+                    {isFetchingReinforcements ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Layers className="w-4 h-4 mr-2" />}
+                    Visualizar Reforços
+                  </Button>
                 </div>
 
                 <Card className="bg-gray-800/50 border-gray-700">
@@ -520,6 +608,13 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* --- RENDERIZAÇÃO DO NOVO MODAL DE REFORÇOS --- */}
+      <ReinforcementDetailsModal 
+        isOpen={isReinforcementModalOpen}
+        onClose={() => setIsReinforcementModalOpen(false)}
+        reinforcements={reinforcementDetails}
+      />
     </div>
   )
 }
