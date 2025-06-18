@@ -1,4 +1,5 @@
-// types/relatorios.ts
+import { UserActivity } from '@/types/activity'
+
 export interface SeparationReport {
   id: string
   type: 'SP' | 'ES' | 'RJ'
@@ -28,8 +29,10 @@ export interface SeparationQuantityReport {
   quantity: number
 }
 
+// A interface DetailedSeparationReport agora inclui o histórico de atividades
 export interface DetailedSeparationReport extends SeparationReport {
   items: SeparationItemReport[]
+  activities: UserActivity[]
 }
 
 export interface ReportFilters {

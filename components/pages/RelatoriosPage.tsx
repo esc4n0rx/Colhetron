@@ -1,9 +1,11 @@
-// components/pages/RelatoriosPage.tsx
 "use client"
 
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Filter, Download, Eye, Search, Calendar, Package, FileText, RotateCcw } from 'lucide-react'
+import { 
+  ArrowLeft, Filter, Download, Eye, Search, Calendar, Package, 
+  FileText, RotateCcw, Activity, Scissors, Upload, PenSquare, Info 
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -13,10 +15,29 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useRelatorios } from '@/hooks/useRelatorios'
 import { ReportFilters } from '@/types/relatorios'
+import { UserActivity } from '@/types/activity'
 
 interface RelatoriosPageProps {
   onBack: () => void
 }
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+  },
+};
 
 export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
   const {
@@ -43,7 +64,6 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
     const newFilters = { ...filters, [key]: value }
     setFilters(newFilters)
     
-    // Converter undefined para undefined na API
     const apiFilters: ReportFilters = {
       ...newFilters,
       type: newFilters.type as "SP" | "ES" | "RJ" | undefined,
@@ -137,9 +157,56 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
     )
   }
 
+  const renderActivityDetail = (activity: UserActivity) => {
+    const { action, metadata } = activity
+    
+    let icon, title, details, color
+    
+    switch (action) {
+      case 'Corte de produto realizado':
+        icon = <Scissors className="w-5 h-5" />
+        color = "text-red-400"
+        title = "Corte de Produto"
+        details = `Produto ${metadata.materialCode} cortado em ${metadata.affectedStores} loja(s), total de ${metadata.totalCutQuantity} unidade(s).`
+        break
+      
+      case 'Reforço carregado':
+        icon = <Upload className="w-5 h-5" />
+        color = "text-blue-400"
+        title = "Reforço de Pedido"
+        details = `Arquivo "${metadata.fileName}" processado. ${metadata.newItems || 0} novo(s) e ${metadata.updatedItems || 0} atualizado(s).`
+        break
+      
+      case 'Alteração de produto realizado':
+        icon = <PenSquare className="w-5 h-5" />
+        color = "text-orange-400"
+        title = "Alteração Manual"
+        details = `Item ${metadata.materialCode} na loja ${metadata.storeCode} alterado de ${metadata.quantity} para ${metadata.quantity}.`
+        break
+      
+      default:
+        icon = <Info className="w-5 h-5" />
+        color = "text-gray-400"
+        title = activity.action
+        details = activity.details
+    }
+
+    return (
+      <div className="flex items-start gap-4">
+        <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center bg-gray-800 ${color}`}>
+          {icon}
+        </div>
+        <div className="flex-1">
+          <p className={`font-semibold ${color}`}>{title}</p>
+          <p className="text-sm text-gray-300">{details}</p>
+          <p className="text-xs text-gray-500 mt-1">{formatDate(activity.created_at)}</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -162,8 +229,7 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
         </div>
       </motion.div>
 
-      {/* Filtros */}
-      <Card className="bg-gray-900/50 border-gray-800">
+       <Card className="bg-gray-900/50 border-gray-800">
         <CardHeader>
           <CardTitle className="text-white flex items-center">
             <Filter className="w-5 h-5 mr-2" />
@@ -183,7 +249,6 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
               />
             </div>
 
-            {/* Tipo */}
             <Select value={filters.type} onValueChange={(value) => handleFilterChange('type', value === 'all' ? undefined : value as 'SP' | 'ES' | 'RJ')}>
               <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                 <SelectValue placeholder="Todos os tipos" />
@@ -196,7 +261,6 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
               </SelectContent>
             </Select>
 
-            {/* Status */}
             <Select value={filters.status} onValueChange={(value) => handleFilterChange('status', value === 'all' ? undefined : value as 'completed' | 'active')}>
               <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
                 <SelectValue placeholder="Todos os status" />
@@ -208,7 +272,6 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
               </SelectContent>
             </Select>
 
-            {/* Data inicial */}
             <div className="relative">
               <Calendar className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
               <Input
@@ -220,7 +283,6 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
               />
             </div>
 
-            {/* Data final */}
             <div className="relative">
               <Calendar className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
               <Input
@@ -250,7 +312,7 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
         </CardContent>
       </Card>
 
-      {/* Tabela de Separações */}
+
       <Card className="bg-gray-900/50 border-gray-800">
         <CardHeader>
           <CardTitle className="text-white flex items-center">
@@ -352,7 +414,6 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
             </div>
           )}
 
-          {/* Paginação */}
           {pagination.totalPages > 1 && (
             <div className="flex items-center justify-between mt-6">
               <div className="text-sm text-gray-400">
@@ -383,9 +444,8 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
         </CardContent>
       </Card>
 
-      {/* Modal de Detalhes */}
       <Dialog open={isDetailModalOpen} onOpenChange={handleCloseModal}>
-        <DialogContent className="bg-gray-900 border-gray-800 max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-gray-900 border-gray-800 max-w-6xl h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center">
               <FileText className="w-5 h-5 mr-2" />
@@ -394,132 +454,68 @@ export default function RelatoriosPage({ onBack }: RelatoriosPageProps) {
           </DialogHeader>
 
           {isLoadingDetails ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex-1 flex items-center justify-center">
               <motion.div
                 animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                 className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full"
               />
               <span className="ml-3 text-white">Carregando detalhes...</span>
             </div>
           ) : selectedSeparation ? (
-            <div className="space-y-6">
-              {/* Informações da Separação */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-4">
-                    <div className="text-sm text-gray-400 mb-1">Tipo</div>
-                    <div className="font-medium text-white">
-                      {getTypeBadge(selectedSeparation.type)}
-                    </div>
-                  </CardContent>
-                </Card>
+            <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+              <div className="lg:col-span-2 overflow-y-auto space-y-6 pr-4">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Tipo</div><div className="font-medium text-white">{getTypeBadge(selectedSeparation.type)}</div></CardContent></Card>
+                  <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Status</div><div className="font-medium text-white">{getStatusBadge(selectedSeparation.status)}</div></CardContent></Card>
+                  <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Data</div><div className="font-medium text-white">{formatDate(selectedSeparation.created_at)}</div></CardContent></Card>
+                  <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Arquivo</div><div className="font-medium text-white text-sm">{selectedSeparation.file_name}</div></CardContent></Card>
+                  <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Total de Itens</div><div className="font-medium text-white">{selectedSeparation.total_items}</div></CardContent></Card>
+                  <Card className="bg-gray-800/50 border-gray-700"><CardContent className="p-4"><div className="text-sm text-gray-400 mb-1">Total de Lojas</div><div className="font-medium text-white">{selectedSeparation.total_stores}</div></CardContent></Card>
+                </div>
 
                 <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-4">
-                    <div className="text-sm text-gray-400 mb-1">Status</div>
-                    <div className="font-medium text-white">
-                      {getStatusBadge(selectedSeparation.status)}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-4">
-                    <div className="text-sm text-gray-400 mb-1">Data</div>
-                    <div className="font-medium text-white">
-                      {formatDate(selectedSeparation.created_at)}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-4">
-                    <div className="text-sm text-gray-400 mb-1">Arquivo</div>
-                    <div className="font-medium text-white text-sm">
-                      {selectedSeparation.file_name}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-4">
-                    <div className="text-sm text-gray-400 mb-1">Total de Itens</div>
-                    <div className="font-medium text-white">
-                      {selectedSeparation.total_items}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gray-800/50 border-gray-700">
-                  <CardContent className="p-4">
-                    <div className="text-sm text-gray-400 mb-1">Total de Lojas</div>
-                    <div className="font-medium text-white">
-                      {selectedSeparation.total_stores}
-                    </div>
-                  </CardContent>
+                  <CardHeader><CardTitle className="text-white text-lg">Itens da Separação ({selectedSeparation.items.length})</CardTitle></CardHeader>
+                  <CardContent><div className="overflow-x-auto"><Table><TableHeader><TableRow className="border-gray-700"><TableHead className="text-gray-300">Código</TableHead><TableHead className="text-gray-300">Descrição</TableHead><TableHead className="text-gray-300">Categoria</TableHead><TableHead className="text-gray-300">Lojas</TableHead><TableHead className="text-gray-300">Total</TableHead></TableRow></TableHeader><TableBody>{selectedSeparation.items.map((item) => { const totalQuantity = item.quantities.reduce((sum, q) => sum + q.quantity, 0); return (<TableRow key={item.id} className="border-gray-700"><TableCell className="text-gray-300 font-mono">{item.material_code}</TableCell><TableCell className="text-gray-300">{item.description}</TableCell><TableCell><Badge variant="outline" className={item.type_separation === 'SECO' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-400/30' : item.type_separation === 'FRIO' ? 'bg-blue-500/20 text-blue-400 border-blue-400/30' : 'bg-green-500/20 text-green-400 border-green-400/30'}>{item.type_separation}</Badge></TableCell><TableCell className="text-gray-400">{item.quantities.length} loja{item.quantities.length !== 1 ? 's' : ''}</TableCell><TableCell className="text-gray-300 font-medium">{totalQuantity.toLocaleString()}</TableCell></TableRow>) })}</TableBody></Table></div></CardContent>
                 </Card>
               </div>
-
-              {/* Tabela de Itens */}
-              <Card className="bg-gray-800/50 border-gray-700">
-                <CardHeader>
-                  <CardTitle className="text-white text-lg">
-                    Itens da Separação ({selectedSeparation.items.length})
+              
+              <div className="lg:col-span-1 bg-gray-800/50 border border-gray-700 rounded-lg flex flex-col">
+                <CardHeader className="flex-shrink-0">
+                  <CardTitle className="text-white flex items-center">
+                    <Activity className="w-5 h-5 mr-2" />
+                    Histórico de Atividades
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-gray-700">
-                          <TableHead className="text-gray-300">Código</TableHead>
-                          <TableHead className="text-gray-300">Descrição</TableHead>
-                          <TableHead className="text-gray-300">Categoria</TableHead>
-                          <TableHead className="text-gray-300">Lojas</TableHead>
-                          <TableHead className="text-gray-300">Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {selectedSeparation.items.map((item) => {
-                          const totalQuantity = item.quantities.reduce((sum, q) => sum + q.quantity, 0)
-                          
-                          return (
-                            <TableRow key={item.id} className="border-gray-700">
-                              <TableCell className="text-gray-300 font-mono">
-                                {item.material_code}
-                              </TableCell>
-                              <TableCell className="text-gray-300">
-                                {item.description}
-                              </TableCell>
-                              <TableCell>
-                                <Badge 
-                                  variant="outline" 
-                                  className={
-                                    item.type_separation === 'SECO' 
-                                      ? 'bg-yellow-500/20 text-yellow-400 border-yellow-400/30'
-                                      : item.type_separation === 'FRIO'
-                                      ? 'bg-blue-500/20 text-blue-400 border-blue-400/30'
-                                      : 'bg-green-500/20 text-green-400 border-green-400/30'
-                                  }
-                                >
-                                  {item.type_separation}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-gray-400">
-                                {item.quantities.length} loja{item.quantities.length !== 1 ? 's' : ''}
-                              </TableCell>
-                              <TableCell className="text-gray-300 font-medium">
-                                {totalQuantity.toLocaleString()}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
+                <CardContent className="flex-1 overflow-y-auto pr-2">
+                  <div className="relative pl-4">
+                    {/* Linha da timeline */}
+                    <div className="absolute left-9 top-0 h-full w-px bg-gray-700" />
+                    
+                    <motion.div
+                      className="space-y-8"
+                      variants={containerVariants}
+                      initial="hidden"
+                      animate="visible"
+                    >
+                      {selectedSeparation.activities && selectedSeparation.activities.length > 0 ? (
+                        selectedSeparation.activities.map((activity) => (
+                          <motion.div key={activity.id} variants={itemVariants} className="relative">
+                            {renderActivityDetail(activity)}
+                          </motion.div>
+                        ))
+                      ) : (
+                        <div className="text-center text-gray-500 py-12">
+                          <Info className="w-8 h-8 mx-auto mb-2"/>
+                          <p>Nenhuma atividade registrada para esta separação.</p>
+                        </div>
+                      )}
+                    </motion.div>
                   </div>
                 </CardContent>
-              </Card>
+              </div>
             </div>
           ) : null}
         </DialogContent>
