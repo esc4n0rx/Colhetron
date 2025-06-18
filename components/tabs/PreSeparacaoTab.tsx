@@ -1,4 +1,4 @@
-// components/tabs/PreSeparacaoTab.tsx (ATUALIZADO)
+
 "use client"
 
 import { useState, useMemo, useCallback } from "react";
@@ -181,7 +181,6 @@ export default function PreSeparacaoTab() {
       printWindow.document.close();
       printWindow.focus();
       printWindow.print();
-      // A janela de impressão pode ser fechada manualmente ou automaticamente pelo navegador.
     }
   }, [filteredData, zones, totals, filtroTipo]);
 

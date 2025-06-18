@@ -113,29 +113,24 @@ export function filterActivitiesForItem(
   separationId: string
 ): UserActivity[] {
   return activities.filter(activity => {
-    // Verificar se a atividade pertence à separação atual
-    if (activity.metadata.separationId !== separationId) {
+    if (activity.metadata?.separationId !== separationId) {
       return false
     }
 
-    // Para alterações manuais: verificar código do material e loja
-    if (activity.action === 'Alteração de produto realizado') {
-      return (activity.metadata.materialCode === materialCode && 
-              activity.metadata.storeCode === storeCode) ||
-             activity.metadata.materialCode === materialCode
-    }
+    switch (activity.action) {
+      case 'Alteração de produto realizado':
+        return activity.metadata?.materialCode === materialCode &&
+               activity.metadata?.storeCode === storeCode
 
-    // Para cortes: verificar código do material E se a loja específica foi afetada
-    if (activity.action === 'Corte de produto realizado') {
-      return isStoreAffectedByCut(activity, materialCode, storeCode)
-    }
+      case 'Corte de produto realizado':
+        return isStoreAffectedByCut(activity, materialCode, storeCode)
 
-    // Para reforços: verificar se o material específico foi afetado
-    if (activity.action === 'Reforço carregado') {
-      return isMaterialAffectedByReinforcement(activity, materialCode)
-    }
+      case 'Reforço carregado':
+        return isMaterialAffectedByReinforcement(activity, materialCode)
 
-    return false
+      default:
+        return false
+    }
   })
 }
 

@@ -1,3 +1,4 @@
+// app/api/separations/update-item-type/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
@@ -5,8 +6,8 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { z } from 'zod'
 
 const updateSchema = z.object({
-  itemId: z.string(),
-  typeSeparation: z.enum(['SECO', 'FRIO', 'ORGANICO']),
+  itemId: z.string().min(1, 'ID do item é obrigatório'),
+  typeSeparation: z.string().min(1, 'Tipo de separação é obrigatório').max(50, 'Tipo de separação muito longo'),
 })
 
 export async function PUT(request: NextRequest) {
@@ -52,11 +53,21 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao atualizar o item' }, { status: 500 })
     }
 
-    return NextResponse.json({ message: 'Tipo de separação atualizado com sucesso' })
+    return NextResponse.json({ 
+      message: 'Tipo de separação atualizado com sucesso',
+      itemId,
+      newType: typeSeparation
+    })
 
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'Dados inválidos', details: error.errors }, { status: 400 })
+      return NextResponse.json({ 
+        error: 'Dados inválidos', 
+        details: error.errors.map(err => ({
+          field: err.path.join('.'),
+          message: err.message
+        }))
+      }, { status: 400 })
     }
     console.error('Erro ao atualizar tipo de separação:', error)
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })

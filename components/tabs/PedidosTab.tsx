@@ -1,4 +1,11 @@
-// components/tabs/PedidosTab.tsx
+//******************************************************************************* */
+// --- COMPONENTE PRINCIPAL --- RESPONSAVEL PELA TABELA DE PEDIDOS
+// --- RENDERIZA A TABELA DE PEDIDOS COM BUSCA, FILTRO E PAGINAÇÃO
+// --- UTILIZA O HOOK usePedidosData PARA PEGAR OS DADOS DOS PEDIDOS
+// --- UTILIZA O HOOK useMaterialCategories PARA PEGAR AS CATEGORIAS DE MATERIAIS
+// --- UTILIZA O GETACTIVITYCOLORCLASSES PARA PEGAR AS CLASSES CSS DAS ATIVIDADES
+//******************************************************************************* */
+
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
@@ -17,7 +24,6 @@ import { getActivityColorClasses } from '@/lib/activity-helpers'
 import { ItemActivityType } from '@/types/activity'
 
 // --- INTERFACES E TIPOS ---
-
 interface PedidoItem {
   id: string
   tipoSepar: string
@@ -43,8 +49,7 @@ type ColumnWidths = {
   [key: string]: number
 }
 
-// --- MODAL DE UPLOAD DE REFORÇO (RESTAURADO) ---
-
+// --- MODAL DE UPLOAD DE REFORÇO ---
 interface ReforcoUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -69,7 +74,6 @@ function ReforcoUploadModal({ isOpen, onClose, onUpload, isUploading }: ReforcoU
     }
   };
   
-  // Limpa o arquivo selecionado quando o modal é fechado
   useEffect(() => {
     if (!isOpen) {
         setSelectedFile(null);
@@ -131,8 +135,7 @@ function ReforcoUploadModal({ isOpen, onClose, onUpload, isUploading }: ReforcoU
   )
 }
 
-// --- COMPONENTE EDITÁVEL INPUT ---
-
+// --- COMPONENTE EDITÁVEL INPUT --- O IDEAL ESSA PARTE SERIA UM COMPONENTE REUSÁVEL
 function EditableInput({ value, onSave, disabled, activityType = 'default' }: EditableInputProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [tempValue, setTempValue] = useState(value.toString())
@@ -145,15 +148,9 @@ function EditableInput({ value, onSave, disabled, activityType = 'default' }: Ed
     setIsEditing(false)
   }
 
-  const handleCancel = () => {
-    setTempValue(value.toString())
-    setIsEditing(false)
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      const numValue = parseInt(tempValue) || 0
-      onSave(numValue)
+      handleSave()
       setIsEditing(false)
     } else if (e.key === 'Escape') {
       setTempValue(value.toString())
@@ -162,8 +159,11 @@ function EditableInput({ value, onSave, disabled, activityType = 'default' }: Ed
   }
 
   const handleBlur = () => {
-    setTempValue(value.toString())
-    setIsEditing(false)
+    setTimeout(() => {
+        if(isEditing) {
+            handleSave()
+        }
+    }, 100);
   }
 
  if (isEditing) {
@@ -196,8 +196,7 @@ function EditableInput({ value, onSave, disabled, activityType = 'default' }: Ed
   )
 }
 
-// --- COMPONENTE EDITÁVEL SELECT ---
-
+// --- COMPONENTE EDITÁVEL SELECT --- O IDEAL ESSA PARTE SERIA UM COMPONENTE REUSÁVEL
 function EditableSelect({ value, onSave, disabled }: EditableSelectProps) {
   const [isEditing, setIsEditing] = useState(false)
   const { categories } = useMaterialCategories()
@@ -256,19 +255,19 @@ function EditableSelect({ value, onSave, disabled }: EditableSelectProps) {
   )
 }
 
-// --- COMPONENTE PRINCIPAL ---
-
+// --- COMPONENTE PRINCIPAL --- RESPONSAVEL PELA TABELA DE PEDIDOS
 export default function PedidosTab() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filtroTipo, setFiltroTipo] = useState("Todos")
   const [showCorteModal, setShowCorteModal] = useState(false)
-  // Estados restaurados para o modal de reforço
   const [isReforcoModalOpen, setIsReforcoModalOpen] = useState(false)
   const [isUploadingReforco, setIsUploadingReforco] = useState(false)
-
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({})
   const [resizing, setResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null)
   
+  const [tableScale, setTableScale] = useState(1.0);
+  const TABLE_SCALE_KEY = 'pedidos-table-scale';
+
   const { 
     pedidos, 
     lojas, 
@@ -280,6 +279,18 @@ export default function PedidosTab() {
     getItemActivityStatus,
     refetch
   } = usePedidosData()
+
+  useEffect(() => {
+    const savedScale = localStorage.getItem(TABLE_SCALE_KEY);
+    if (savedScale) {
+        setTableScale(parseFloat(savedScale) || 1.0);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(TABLE_SCALE_KEY, String(tableScale));
+  }, [tableScale]);
+
 
   const availableTypes = useMemo(() => {
     const types = new Set(pedidos.map(item => item.tipoSepar).filter(Boolean))
@@ -308,13 +319,12 @@ export default function PedidosTab() {
     })
   }, [pedidos, searchTerm, filtroTipo])
 
-  // Handler de upload de reforço restaurado
   const handleReforcoUpload = async (file: File) => {
     setIsUploadingReforco(true)
     try {
       await uploadReforco(file)
       toast.success('Reforço carregado com sucesso!')
-      setIsReforcoModalOpen(false) // Fecha o modal ao ter sucesso
+      setIsReforcoModalOpen(false)
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar reforço'
       toast.error(errorMessage)
@@ -338,7 +348,7 @@ export default function PedidosTab() {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!resizing) return
-      const diff = e.clientX - resizing.startX
+      const diff = (e.clientX - resizing.startX) / tableScale;
       const newWidth = Math.max(60, resizing.startWidth + diff)
       setColumnWidths(prev => ({
         ...prev,
@@ -355,7 +365,7 @@ export default function PedidosTab() {
         document.removeEventListener('mouseup', handleMouseUp)
       }
     }
-  }, [resizing])
+  }, [resizing, tableScale])
 
   const getTotalByStore = useCallback((store: string) => {
     return filteredData.reduce((total, item) => total + (Number(item[store]) || 0), 0)
@@ -378,7 +388,7 @@ export default function PedidosTab() {
           <p className="text-gray-400">Gerencie as quantidades por loja ({filteredData.length} itens)</p>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Button 
             onClick={() => setShowCorteModal(true)}
             variant="outline"
@@ -387,6 +397,23 @@ export default function PedidosTab() {
             <Scissors className="w-4 h-4 mr-2" />
             Corte de Produto
           </Button>
+
+          <div className="flex items-center gap-2 border border-gray-700 bg-gray-800/50 text-white rounded-md h-10 px-3">
+            <label htmlFor="table-size-slider" className="text-sm font-medium text-gray-300 whitespace-nowrap">
+              Tamanho
+            </label>
+            <input
+              id="table-size-slider"
+              type="range"
+              min="0.7"
+              max="1.2"
+              step="0.05"
+              value={tableScale}
+              onChange={(e) => setTableScale(parseFloat(e.target.value))}
+              className="w-24 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+            />
+          </div>
+
           <Button 
             onClick={() => setIsReforcoModalOpen(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -397,7 +424,6 @@ export default function PedidosTab() {
         </div>
       </div>
 
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <div className="relative flex-1 min-w-64">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -433,7 +459,6 @@ export default function PedidosTab() {
         </div>
       )}
 
-      {/* Loading */}
       {isLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
@@ -441,75 +466,89 @@ export default function PedidosTab() {
         </div>
       )}
 
-      {/* Tabela */}
+      {/* Tabela com ajuste de layout */}
       {!isLoading && !error && filteredData.length > 0 && (
-        <div className="bg-gray-900/50 border border-gray-800 rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-gray-700 bg-gray-800/50">
-                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-24 sticky left-0 bg-gray-800/80 z-20">CATEGORIA</TableHead>
-                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-28 sticky left-24 bg-gray-800/80 z-20">CÓDIGO</TableHead>
-                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 min-w-60">DESCRIÇÃO</TableHead>
-                  {lojas.map((loja) => (
-                    <TableHead 
-                      key={loja} 
-                      className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 relative group"
-                      style={{ width: columnWidths[loja] || 80, minWidth: 60 }}
-                    >
-                      <div className="flex flex-col items-center">
-                        <span className="flex-1 text-center">{loja}</span>
-                        <div className="text-[9px] text-gray-500 mt-1">
-                          {getTotalByStore(loja).toLocaleString()}
-                        </div>
-                      </div>
-                      <div
-                        className="absolute top-0 right-0 w-1 h-full bg-gray-600 cursor-col-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                        onMouseDown={(e) => startResize(e, loja)}
-                      />
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredData.map((item) => (
-                  <TableRow key={item.id} className="border-gray-700 hover:bg-gray-700/30">
-                    <TableCell className="text-center border-r border-gray-700 sticky left-0 bg-gray-900/80 z-10">
-                      <EditableSelect
-                        value={item.tipoSepar}
-                        onSave={(value) => updateItemType(item.id, value)}
-                        disabled={isLoading}
-                      />
-                    </TableCell>
-                    <TableCell className="text-center border-r border-gray-700 font-mono text-xs text-gray-300 sticky left-24 bg-gray-900/80 z-10">
-                      {item.codigo}
-                    </TableCell>
-                    <TableCell className="border-r border-gray-700 text-xs text-gray-300 truncate">
-                      {item.descricao}
-                    </TableCell>
-                    {lojas.map((loja) => (
-                      <TableCell 
-                        key={loja} 
-                        className="text-center border-r border-gray-700"
-                        style={{ width: columnWidths[loja] || 80 }}
-                      >
-                        <EditableInput
-                          value={Number(item[loja] || 0)}
-                          onSave={(value) => updateQuantity(item.id, loja, value)}
-                          disabled={isLoading}
-                          activityType={getItemActivityStatus(item.id, loja)?.activityType || 'default'}
-                        />
-                      </TableCell>
+        // Container pai que irá cortar o conteúdo expandido
+        <div className="overflow-hidden rounded-lg">
+          <div
+            // Container filho que é escalado e expandido
+            className="bg-gray-900/50 border border-gray-800 rounded-lg transition-transform duration-200"
+            style={{
+              transform: `scale(${tableScale})`,
+              transformOrigin: 'top left',
+              // Expande a largura e altura inversamente à escala
+              width: `${100 / tableScale}%`,
+              height: `${100 / tableScale}%`,
+            }}
+          >
+            <div className="overflow-x-auto">
+              <div className="table-wrapper">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-700 bg-gray-800/50">
+                      <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-24 sticky left-0 bg-gray-800/80 z-20">CATEGORIA</TableHead>
+                      <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-28 sticky left-24 bg-gray-800/80 z-20">CÓDIGO</TableHead>
+                      <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 min-w-60">DESCRIÇÃO</TableHead>
+                      {lojas.map((loja) => (
+                        <TableHead 
+                          key={loja} 
+                          className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 relative group"
+                          style={{ width: columnWidths[loja] || 80, minWidth: 60 }}
+                        >
+                          <div className="flex flex-col items-center">
+                            <span className="flex-1 text-center">{loja}</span>
+                            <div className="text-[9px] text-gray-500 mt-1">
+                              {getTotalByStore(loja).toLocaleString()}
+                            </div>
+                          </div>
+                          <div
+                            className="absolute top-0 right-0 w-1 h-full bg-gray-600 cursor-col-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                            onMouseDown={(e) => startResize(e, loja)}
+                          />
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredData.map((item) => (
+                      <TableRow key={item.id} className="border-gray-700 hover:bg-gray-700/30">
+                        <TableCell className="text-center border-r border-gray-700 sticky left-0 bg-gray-900/80 z-10">
+                          <EditableSelect
+                            value={item.tipoSepar}
+                            onSave={(value) => updateItemType(item.id, value)}
+                            disabled={isLoading}
+                          />
+                        </TableCell>
+                        <TableCell className="text-center border-r border-gray-700 font-mono text-xs text-gray-300 sticky left-24 bg-gray-900/80 z-10">
+                          {item.codigo}
+                        </TableCell>
+                        <TableCell className="border-r border-gray-700 text-xs text-gray-300 truncate">
+                          {item.descricao}
+                        </TableCell>
+                        {lojas.map((loja) => (
+                          <TableCell 
+                            key={loja} 
+                            className="text-center border-r border-gray-700"
+                            style={{ width: columnWidths[loja] || 80 }}
+                          >
+                            <EditableInput
+                              value={Number(item[loja] || 0)}
+                              onSave={(value) => updateQuantity(item.id, loja, value)}
+                              disabled={isLoading}
+                              activityType={getItemActivityStatus(item.id, loja)?.activityType || 'default'}
+                            />
+                          </TableCell>
+                        ))}
+                      </TableRow>
                     ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Empty state */}
       {!isLoading && !error && filteredData.length === 0 && (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
@@ -525,14 +564,12 @@ export default function PedidosTab() {
         </div>
       )}
 
-      {/* Modais */}
       <CorteModal 
         isOpen={showCorteModal}
         onClose={() => setShowCorteModal(false)} 
         onCutExecuted={handleCorteExecuted}
       />
       
-      {/* Modal de Upload de Reforço (corrigido) */}
       <ReforcoUploadModal
         isOpen={isReforcoModalOpen}
         onClose={() => setIsReforcoModalOpen(false)}
