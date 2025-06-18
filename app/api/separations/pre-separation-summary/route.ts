@@ -1,9 +1,7 @@
-
+// app/api/separations/pre-separation-summary/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
-
-
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,11 +44,11 @@ export async function GET(request: NextRequest) {
 
     if (itemsError) throw new Error(`Erro ao buscar itens: ${itemsError.message}`);
 
-    // 3. Buscar todas as lojas cadastradas pelo usuário para mapear zonas
+    // 3. Buscar TODAS as lojas cadastradas (UNIVERSAL - sem user_id)
     const { data: lojas, error: lojasError } = await supabaseAdmin
       .from('colhetron_lojas')
-      .select('prefixo, zonaSeco, zonaFrio')
-      .eq('user_id', decoded.userId);
+      .select('prefixo, zonaSeco, zonaFrio');
+      // REMOVIDO: .eq('user_id', decoded.userId)
 
     if (lojasError) throw new Error(`Erro ao buscar lojas: ${lojasError.message}`);
 
@@ -115,7 +113,6 @@ export async function GET(request: NextRequest) {
         });
         return completeRow;
     }).sort((a,b) => a.material.localeCompare(b.material));
-
 
     return NextResponse.json({ data: finalData, zones: sortedZones });
 

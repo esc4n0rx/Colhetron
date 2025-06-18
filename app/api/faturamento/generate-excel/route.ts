@@ -150,16 +150,15 @@ async function getFaturamentoItems(userId: string) {
   const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
   
   const { data: lojas, error: lojasError } = await supabaseAdmin
-    .from('colhetron_lojas')
-    .select('prefixo, centro')
-    .eq('user_id', userId)
-    .in('prefixo', uniqueStoreCodes)
+  .from('colhetron_lojas')
+  .select('prefixo, centro')
+  .in('prefixo', uniqueStoreCodes) 
 
   if (lojasError) {
     throw new Error('Erro ao buscar dados de lojas')
   }
 
-  // Criar mapa de prefixo para centro
+
   const storeToCenter = new Map<string, string>()
   lojas?.forEach(loja => {
     if (loja.centro) {

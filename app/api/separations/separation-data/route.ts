@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     const { data: lojas, error: lojasError } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('prefixo, nome, zonaSeco, subzonaSeco, zonaFrio, ordemSeco, ordemFrio')
-      .eq('user_id', decoded.userId)
+      //.eq('user_id', decoded.userId)
 
     if (lojasError) throw new Error(`Erro ao buscar lojas: ${lojasError.message}`)
 

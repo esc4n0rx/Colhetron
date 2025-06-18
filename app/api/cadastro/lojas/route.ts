@@ -1,16 +1,15 @@
-
+// app/api/cadastro/lojas/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { z } from 'zod'
-
-
 
 const lojaSchema = z.object({
   prefixo: z.string().min(1, 'Prefixo é obrigatório'),
   nome: z.string().min(1, 'Nome é obrigatório'),
   tipo: z.enum(['CD', 'Loja Padrão', 'Administrativo']),
   uf: z.string().min(2, 'UF é obrigatória'),
+  centro: z.string().optional().default(''),
   zonaSeco: z.string().optional().default(''),
   subzonaSeco: z.string().optional().default(''),
   zonaFrio: z.string().optional().default(''),
@@ -38,11 +37,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar lojas do usuário
+    // Buscar TODAS as lojas (universal - sem filtro de usuário)
     const { data: lojas, error } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('*')
-      .eq('user_id', decoded.userId)
       .order('prefixo')
 
     if (error) {
@@ -87,11 +85,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = lojaSchema.parse(body)
 
-    // Verificar se já existe loja com mesmo prefixo para o usuário
+    // Verificar se já existe loja com mesmo prefixo (universal)
     const { data: existingLoja } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('id')
-      .eq('user_id', decoded.userId)
       .eq('prefixo', validatedData.prefixo)
       .single()
 
@@ -102,15 +99,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Criar nova loja
+    // Criar nova loja (sem user_id)
     const { data: newLoja, error } = await supabaseAdmin
       .from('colhetron_lojas')
-      .insert([
-        {
-          ...validatedData,
-          user_id: decoded.userId
-        }
-      ])
+      .insert([validatedData])
       .select()
       .single()
 
@@ -171,27 +163,25 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Verificar se a loja pertence ao usuário
+    // Verificar se a loja existe (sem verificar usuário)
     const { data: existingLoja, error: checkError } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('id')
       .eq('id', id)
-      .eq('user_id', decoded.userId)
       .single()
 
     if (checkError || !existingLoja) {
       return NextResponse.json(
-        { error: 'Loja não encontrada ou não autorizada' },
+        { error: 'Loja não encontrada' },
         { status: 404 }
       )
     }
 
-    // Atualizar loja
+    // Atualizar loja (sem filtro de usuário)
     const { data: updatedLoja, error } = await supabaseAdmin
       .from('colhetron_lojas')
       .update(updateData)
       .eq('id', id)
-      .eq('user_id', decoded.userId)
       .select()
       .single()
 

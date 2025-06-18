@@ -4,8 +4,6 @@ import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { z } from 'zod'
 
-
-
 const updateSchema = z.object({
   itemId: z.string(),
   typeSeparation: z.enum(['SECO', 'FRIO', 'ORGANICO']),

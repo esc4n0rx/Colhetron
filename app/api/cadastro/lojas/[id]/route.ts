@@ -19,132 +19,135 @@ const updateLojaSchema = z.object({
 })
 
 export async function PUT(
- request: NextRequest,
- { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
- try {
-   const authHeader = request.headers.get('authorization')
-   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-     return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
-   }
+  try {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
+    }
 
-   const token = authHeader.split(' ')[1]
-   const decoded = verifyToken(token)
-   if (!decoded) {
-     return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
-   }
+    const token = authHeader.split(' ')[1]
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+    }
 
-   const { id } = params
-   const updates = await request.json()
-   const validatedData = updateLojaSchema.parse(updates)
+    const { id } = params
+    const updates = await request.json()
+    const validatedData = updateLojaSchema.parse(updates)
 
-   // Verificar se a loja pertence ao usuário
-   const { data: existingLoja, error: checkError } = await supabaseAdmin
-     .from('colhetron_lojas')
-     .select('*')
-     .eq('id', id)
-     .eq('user_id', decoded.userId)
-     .single()
+    // Verificar se a loja existe (sem verificar usuário)
+    const { data: existingLoja, error: checkError } = await supabaseAdmin
+      .from('colhetron_lojas')
+      .select('*')
+      .eq('id', id)
+      .single()
 
-   if (checkError || !existingLoja) {
-     return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 })
-   }
+    if (checkError || !existingLoja) {
+      return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 })
+    }
 
-   // Verificar se há conflito de prefixo (se o prefixo está sendo alterado)
-   if (validatedData.prefixo && validatedData.prefixo !== existingLoja.prefixo) {
-     const { data: conflictLoja } = await supabaseAdmin
-       .from('colhetron_lojas')
-       .select('id')
-       .eq('user_id', decoded.userId)
-       .eq('prefixo', validatedData.prefixo)
-       .neq('id', id)
-       .single()
+    // Verificar se há conflito de prefixo (se o prefixo está sendo alterado)
+    if (validatedData.prefixo && validatedData.prefixo !== existingLoja.prefixo) {
+      const { data: conflictLoja } = await supabaseAdmin
+        .from('colhetron_lojas')
+        .select('id')
+        .eq('prefixo', validatedData.prefixo)
+        .neq('id', id)
+        .single()
 
-     if (conflictLoja) {
-       return NextResponse.json({ 
-         error: 'Já existe uma loja com este prefixo' 
-       }, { status: 409 })
-     }
-   }
+      if (conflictLoja) {
+        return NextResponse.json({ 
+          error: 'Já existe uma loja com este prefixo' 
+        }, { status: 409 })
+      }
+    }
 
-   // Atualizar loja
-   const { data: updatedLoja, error: updateError } = await supabaseAdmin
-     .from('colhetron_lojas')
-     .update(validatedData)
-     .eq('id', id)
-     .eq('user_id', decoded.userId)
-     .select()
-     .single()
+    // Atualizar loja (sem filtro de usuário)
+    const { data: updatedLoja, error: updateError } = await supabaseAdmin
+      .from('colhetron_lojas')
+      .update(validatedData)
+      .eq('id', id)
+      .select()
+      .single()
 
-   if (updateError) {
-     console.error('Erro ao atualizar loja:', updateError)
-     return NextResponse.json({ error: 'Erro ao atualizar loja' }, { status: 500 })
-   }
+    if (updateError) {
+      console.error('Erro ao atualizar loja:', updateError)
+      return NextResponse.json({ error: 'Erro ao atualizar loja' }, { status: 500 })
+    }
 
-   await logActivity({
-    userId: decoded.userId,
-    action: 'Loja Adicionanda',
-    details: 'Voçe adicionou uma loja com sucesso',
-    type: 'media_analysis',
-  })
+    await logActivity({
+      userId: decoded.userId,
+      action: 'Loja Atualizada',
+      details: `Loja ${existingLoja.prefixo} - ${existingLoja.nome} foi atualizada`,
+      type: 'update',
+    })
 
-   return NextResponse.json(updatedLoja)
+    return NextResponse.json(updatedLoja)
 
- } catch (error) {
-   console.error('Erro na atualização:', error)
-   
-   if (error instanceof z.ZodError) {
-     return NextResponse.json(
-       { error: 'Dados inválidos', details: error.errors },
-       { status: 400 }
-     )
-   }
+  } catch (error) {
+    console.error('Erro na atualização:', error)
+    
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Dados inválidos', details: error.errors },
+        { status: 400 }
+      )
+    }
 
-   return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
- }
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
+  }
 }
 
 export async function DELETE(
- request: NextRequest,
- { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: { id: string } }
 ) {
- try {
-   const authHeader = request.headers.get('authorization')
-   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-     return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
-   }
+  try {
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
+    }
 
-   const token = authHeader.split(' ')[1]
-   const decoded = verifyToken(token)
-   if (!decoded) {
-     return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
-   }
+    const token = authHeader.split(' ')[1]
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+    }
 
-   const { id } = params
+    const { id } = params
 
-   // Deletar loja
-   const { error: deleteError } = await supabaseAdmin
-     .from('colhetron_lojas')
-     .delete()
-     .eq('id', id)
-     .eq('user_id', decoded.userId)
+    // Buscar loja para log antes de deletar
+    const { data: existingLoja } = await supabaseAdmin
+      .from('colhetron_lojas')
+      .select('prefixo, nome')
+      .eq('id', id)
+      .single()
 
-   if (deleteError) {
-     console.error('Erro ao deletar loja:', deleteError)
-     return NextResponse.json({ error: 'Erro ao deletar loja' }, { status: 500 })
-   }
+    // Deletar loja (sem filtro de usuário)
+    const { error: deleteError } = await supabaseAdmin
+      .from('colhetron_lojas')
+      .delete()
+      .eq('id', id)
 
-   await logActivity({
-    userId: decoded.userId,
-    action: 'Loja Deletada',
-    details: 'Voçe removeu a loja com sucesso',
-    type: 'media_analysis',
-  })
+    if (deleteError) {
+      console.error('Erro ao deletar loja:', deleteError)
+      return NextResponse.json({ error: 'Erro ao deletar loja' }, { status: 500 })
+    }
 
-   return NextResponse.json({ message: 'Loja deletada com sucesso' })
+    await logActivity({
+      userId: decoded.userId,
+      action: 'Loja Deletada',
+      details: `Loja ${existingLoja?.prefixo} - ${existingLoja?.nome} foi removida`,
+      type: 'update',
+    })
 
- } catch (error) {
-   console.error('Erro na deleção:', error)
-   return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
- }
+    return NextResponse.json({ message: 'Loja deletada com sucesso' })
+
+  } catch (error) {
+    console.error('Erro na deleção:', error)
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
+  }
 }

@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
 
     const token = authHeader.split(' ')[1]
     const decoded = verifyToken(token)
+    
     if (!decoded) {
       return NextResponse.json(
         { error: 'Token inválido' },
@@ -28,15 +29,20 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json(
-        { error: 'Nenhum arquivo enviado' },
+        { error: 'Arquivo é obrigatório' },
         { status: 400 }
       )
     }
 
-    // Verificar se é arquivo Excel
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+    // Validar tipo de arquivo
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel' // .xls
+    ]
+
+    if (!allowedTypes.includes(file.type)) {
       return NextResponse.json(
-        { error: 'Formato de arquivo inválido. Use arquivos Excel (.xlsx ou .xls)' },
+        { error: 'Tipo de arquivo inválido. Use arquivos Excel (.xlsx ou .xls)' },
         { status: 400 }
       )
     }
@@ -52,20 +58,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Inserir lojas em lotes
+    // Inserir lojas em lotes (SEM user_id)
     const batchSize = 100
     const insertedLojas: any[] = []
 
     for (let i = 0; i < processedLojas.length; i += batchSize) {
-      const batch = processedLojas.slice(i, i + batchSize).map(loja => ({
-        ...loja,
-        user_id: decoded.userId
-      }))
+      const batch = processedLojas.slice(i, i + batchSize)
 
       const { data: lojas, error } = await supabaseAdmin
         .from('colhetron_lojas')
         .upsert(batch, { 
-          onConflict: 'user_id,prefixo',
+          onConflict: 'prefixo',
           ignoreDuplicates: false 
         })
         .select()
@@ -114,13 +117,13 @@ async function processLojasExcel(buffer: Uint8Array): Promise<any[]> {
   const headers = data[0] as string[]
   const rows = data.slice(1) as any[][]
 
-  // Mapear colunas esperadas (incluindo CENTRO)
+  // Mapear colunas esperadas
   const columnMap = {
     'PREFIXO': 'prefixo',
     'NOME': 'nome',
     'Tipo': 'tipo',
     'UF': 'uf',
-    'CENTRO': 'centro', // Nova coluna
+    'CENTRO': 'centro',
     'ZONA SECO': 'zonaSeco',
     'SUBZONA SECO': 'subzonaSeco',
     'ZONA FRIO': 'zonaFrio',
@@ -138,38 +141,50 @@ async function processLojasExcel(buffer: Uint8Array): Promise<any[]> {
 
   // Verificar colunas obrigatórias
   const requiredFields = ['prefixo', 'nome', 'uf']
-  const missingFields = requiredFields.filter(field => !(field in headerIndexes))
-  
+  const missingFields = requiredFields.filter(field => !headerIndexes[field])
+
   if (missingFields.length > 0) {
     throw new Error(`Colunas obrigatórias não encontradas: ${missingFields.join(', ')}`)
   }
 
   const processedLojas: any[] = []
 
-  for (const row of rows) {
-    if (!row || row.length === 0) continue
+  rows.forEach((row, rowIndex) => {
+    if (!row || row.every(cell => !cell)) return // Pular linhas vazias
 
-    const prefixo = row[headerIndexes.prefixo]?.toString()?.trim()
-    const nome = row[headerIndexes.nome]?.toString()?.trim()
-    const uf = row[headerIndexes.uf]?.toString()?.trim()
+    const loja: any = {}
 
-    if (!prefixo || !nome || !uf) continue
+    // Processar cada campo
+    Object.entries(headerIndexes).forEach(([field, colIndex]) => {
+      const value = row[colIndex]
+      
+      if (value !== undefined && value !== null && value !== '') {
+        if (field === 'ordemSeco' || field === 'ordemFrio') {
+          loja[field] = Number(value) || 0
+        } else {
+          loja[field] = String(value).trim()
+        }
+      } else {
+        // Valores padrão para campos opcionais
+        if (field === 'ordemSeco' || field === 'ordemFrio') {
+          loja[field] = 0
+        } else if (['centro', 'zonaSeco', 'subzonaSeco', 'zonaFrio'].includes(field)) {
+          loja[field] = ''
+        }
+      }
+    })
 
-    const loja = {
-      prefixo,
-      nome,
-      tipo: row[headerIndexes.tipo]?.toString()?.trim() || 'CD',
-      uf,
-      centro: row[headerIndexes.centro]?.toString()?.trim() || '', // Incluir centro
-      zonaSeco: row[headerIndexes.zonaSeco]?.toString()?.trim() || '',
-      subzonaSeco: row[headerIndexes.subzonaSeco]?.toString()?.trim() || '',
-      zonaFrio: row[headerIndexes.zonaFrio]?.toString()?.trim() || '',
-      ordemSeco: parseInt(row[headerIndexes.ordemSeco]) || 0,
-      ordemFrio: parseInt(row[headerIndexes.ordemFrio]) || 0
+    // Validar campos obrigatórios
+    if (loja.prefixo && loja.nome && loja.uf) {
+      // Validar tipo se fornecido
+      const validTypes = ['CD', 'Loja Padrão', 'Administrativo']
+      if (loja.tipo && !validTypes.includes(loja.tipo)) {
+        loja.tipo = 'Loja Padrão' // Valor padrão
+      }
+
+      processedLojas.push(loja)
     }
-
-    processedLojas.push(loja)
-  }
+  })
 
   return processedLojas
 }

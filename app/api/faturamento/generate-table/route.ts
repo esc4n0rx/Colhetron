@@ -88,17 +88,15 @@ export async function GET(request: NextRequest) {
     const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
     
     const { data: lojas, error: lojasError } = await supabaseAdmin
-      .from('colhetron_lojas')
-      .select('prefixo, centro')
-      .eq('user_id', decoded.userId)
-      .in('prefixo', uniqueStoreCodes)
+    .from('colhetron_lojas')
+    .select('prefixo, centro')
+    .in('prefixo', uniqueStoreCodes)
 
     if (lojasError) {
       console.error('Erro ao buscar lojas:', lojasError)
       return NextResponse.json({ error: 'Erro ao buscar dados de lojas' }, { status: 500 })
     }
 
-    // Criar mapa de prefixo para centro
     const storeToCenter = new Map<string, string>()
     lojas?.forEach(loja => {
       if (loja.centro) {
