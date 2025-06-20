@@ -1,6 +1,3 @@
-// components/tabs/SeparacaoTab.tsx
-// Este componente gerencia a visualização de dados de separação organizados por zona e tipo
-// Implementa filtros inteligentes e ocultação automática de colunas sem quantidades
 
 "use client"
 
@@ -34,7 +31,7 @@ export default function SeparacaoTab() {
     return ['Todos', ...sortedTypes]
   }, [data])
 
-  // Calcula zonas disponíveis baseado no tipo de separação selecionado
+
   const availableZones = useMemo(() => {
     if (filtroTipo === "Todos") return ["Todas"]
     
@@ -47,10 +44,10 @@ export default function SeparacaoTab() {
       }
     })
     
-    return ['Todas', ...Array.from(zones).sort()]
+    return ['Todos', ...Array.from(zones).sort()]
   }, [lojas, filtroTipo])
 
-  // Calcula subzonas disponíveis (apenas para tipo SECO e quando uma zona específica é selecionada)
+
   const availableSubzones = useMemo(() => {
     if (filtroTipo === "Todos" || filtroZona === "Todas" || filtroTipo === 'FRIO') {
       return ["Todas"]
@@ -63,16 +60,16 @@ export default function SeparacaoTab() {
       }
     })
     
-    return ['Todas', ...Array.from(subzones).sort()]
+    return ['Todos', ...Array.from(subzones).sort()]
   }, [lojas, filtroZona, filtroTipo])
 
-  // Filtra os dados baseado no tipo de separação selecionado
+
   const filteredData = useMemo(() => {
     if (filtroTipo === "Todos") return data
     return data.filter(item => item.tipoSepar === filtroTipo)
   }, [data, filtroTipo])
 
-  // Obtém lojas ordenadas aplicando filtros de zona e subzona
+
   const orderedStores = useMemo(() => {
     if (filtroTipo === "Todos") return []
     
@@ -86,7 +83,7 @@ export default function SeparacaoTab() {
       })
     }
     
-    // Aplica filtro de subzona se selecionada (apenas para SECO)
+
     if (filtroSubzona !== "Todas" && filtroTipo === 'SECO') {
       stores = stores.filter(loja => loja.subzonaSeco === filtroSubzona)
     }
@@ -226,12 +223,11 @@ export default function SeparacaoTab() {
       </div>
     `
 
-    // Cabeçalho da tabela usando apenas lojas visíveis
     const tableHeader = `
       <thead>
         <tr>
-          <th>MATERIAL SEPARAÇÃO</th>
-          ${visibleStores.map(store => `
+          <th rowspan="2" style="vertical-align: middle;">MATERIAL SEPARAÇÃO</th>
+          ${orderedStores.map(store => `
             <th class="text-center store-header">${store.prefixo}</th>
           `).join('')}
         </tr>
@@ -252,7 +248,6 @@ export default function SeparacaoTab() {
       </tbody>
     `
 
-    // Rodapé com totais das lojas visíveis
     const tableFooter = `
     <tfoot>
       <tr>
@@ -295,17 +290,16 @@ export default function SeparacaoTab() {
       </html>
     `
 
-    // Abre nova janela e executa impressão
-    const printWindow = window.open('', '_blank');
+    const printWindow = window.open('', '_blank')
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
       printWindow.focus();
       printWindow.print();
     }
-  }, [filteredData, visibleStores, totals, filtroTipo, filtroZona, filtroSubzona]);
+  }, [filteredData, orderedStores, totals, filtroTipo, filtroZona, filtroSubzona])
 
-  // Função para alterar tipo de separação e resetar filtros dependentes
+
   const handleTipoChange = (tipo: typeof filtroTipo) => {
     setFiltroTipo(tipo)
     setFiltroZona("Todas")
@@ -369,9 +363,9 @@ export default function SeparacaoTab() {
         </Button>
       </div>
 
-      {/* Seção de filtros em cards responsivos */}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Filtro de Tipo de Separação */}
+
         <Card className="bg-gray-900/50 border-gray-800 p-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -440,7 +434,7 @@ export default function SeparacaoTab() {
                   size="sm"
                   variant={filtroSubzona === subzona ? "default" : "outline"}
                   onClick={() => setFiltroSubzona(subzona)}
-                  disabled={filtroTipo !== "SECO" || filtroZona === "Todas"}
+                  disabled={filtroTipo !== "SECO" || filtroZona === "Todos"}
                   className={`text-xs ${
                     filtroSubzona === subzona 
                       ? "bg-blue-600 text-white" 
@@ -455,18 +449,18 @@ export default function SeparacaoTab() {
         </Card>
       </div>
 
-      {/* Tabela principal com dados de separação */}
+
       <Card className="bg-gray-900/50 border-gray-800">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
+                {/* CABEÇALHO AJUSTADO: Apenas uma linha */}
                 <TableRow className="border-gray-700 bg-gray-800/50">
                   <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 min-w-80">
                     MATERIAL SEPARAÇÃO
                   </TableHead>
-                  {/* 🆕 ATUALIZADO: Usa visibleStores ao invés de orderedStores */}
-                  {visibleStores.map((store) => (
+                  {orderedStores.map((store, index) => (
                     <TableHead
                       key={store.prefixo}
                       className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 w-12"
@@ -480,6 +474,7 @@ export default function SeparacaoTab() {
                 {filteredData.length > 0 ? (
                   filteredData.map((item, index) => (
                     <TableRow key={item.id} className="border-gray-700 hover:bg-gray-800/30 transition-colors">
+                      <TableCell className="text-white text-xs border-r border-gray-700 font-medium"></TableCell>
                       <TableCell className="text-white text-xs border-r border-gray-700">{item.material}</TableCell>
                       {/* 🆕 ATUALIZADO: Usa visibleStores para mostrar apenas colunas com quantidades */}
                       {visibleStores.map((store) => (
@@ -499,8 +494,7 @@ export default function SeparacaoTab() {
                   ))
                 ) : (
                   <TableRow>
-                    {/* 🆕 ATUALIZADO: Colspan ajustado para visibleStores */}
-                    <TableCell colSpan={visibleStores.length + 1} className="text-center text-gray-400 py-8">
+                    <TableCell colSpan={orderedStores.length + 2} className="text-center text-gray-400 py-8">
                       {filtroTipo === "Todos" 
                         ? "Selecione um tipo de separação para visualizar os dados"
                         : "Nenhum material encontrado para os filtros selecionados"
@@ -513,7 +507,7 @@ export default function SeparacaoTab() {
               {filteredData.length > 0 && visibleStores.length > 0 && (
                 <tfoot>
                   <TableRow className="bg-gray-800 border-t-2 border-gray-700">
-                    <TableHead className="text-right text-white font-bold text-sm pr-4">
+                    <TableHead colSpan={2} className="text-right text-white font-bold text-sm pr-4">
                       Total Geral
                     </TableHead>
                     {/* 🆕 ATUALIZADO: Totais apenas para lojas visíveis */}
