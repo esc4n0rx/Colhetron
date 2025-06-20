@@ -56,7 +56,7 @@ export async function PUT(
       let status = 'OK'
       
       // 1. Se saldo de Qtd Caixa > estoque atual = CRÍTICO
-      if (quantidadeCaixas > existingItem.estoque_atual) {
+      if (existingItem.estoque_atual >quantidadeCaixas) {
         status = 'CRÍTICO'
       }
       // 2. Se saldo atual = 0 = OK

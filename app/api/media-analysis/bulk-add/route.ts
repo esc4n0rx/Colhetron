@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
         let status = 'OK'
         
         // 1. Se saldo de Qtd Caixa > estoque atual = CRÍTICO (faltando)
-        if (item.quantidade_caixas > estoqueAtual) {
+        if (estoqueAtual> item.quantidade_caixas ) {
           status = 'CRÍTICO'
         }
         // 2. Se saldo atual = 0 = OK (não tem distribuição)

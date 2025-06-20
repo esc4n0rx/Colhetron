@@ -1,4 +1,3 @@
-// hooks/useMediaAnalysisData.ts
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -54,7 +53,6 @@ export function useMediaAnalysisData() {
 
       const result = await response.json()
       
-      // Mapear campos do banco para o formato do frontend
       const mappedData = (result.data || []).map((item: any) => ({
         id: item.id,
         codigo: item.codigo,
@@ -93,15 +91,10 @@ export function useMediaAnalysisData() {
         throw new Error('Token de autorização não encontrado')
       }
 
-      // Processar itens conforme nova lógica
       const processedItems = items.map(item => {
-        // Remover zeros à esquerda do código
         const codigo = String(item.codigo || '').replace(/^0+/, '') || '0'
-        
         const quantidadeKg = Number(item.quantidadeKg || item.quantidade_kg || 0)
         const quantidadeCaixas = Number(item.quantidadeCaixas || item.quantidade_caixas || 0)
-
-        // Calcular média do sistema (mantendo valor original)
         const mediaSistema = quantidadeCaixas > 0 ? quantidadeKg / quantidadeCaixas : 0
 
         return {
