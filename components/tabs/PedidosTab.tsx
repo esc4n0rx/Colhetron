@@ -26,13 +26,15 @@ import { getActivityColorClasses } from '@/lib/activity-helpers'
 import { ItemActivityType } from '@/types/activity'
 
 // --- INTERFACES E TIPOS ---
+// Fica a dica: Manter as interfaces perto de onde são usadas ajuda na leitura,
+// mas se forem usadas em vários lugares, vale a pena ter um arquivo só pra types.
 interface PedidoItem {
   id: string
   tipoSepar: string
   calibre: string
   codigo: string
   descricao: string
-  [key: string]: string | number
+  [key: string]: string | number // Index signature pra gente poder acessar as lojas dinamicamente (ex: item[loja])
 }
 
 interface EditableInputProps {
@@ -53,6 +55,7 @@ type ColumnWidths = {
 }
 
 // --- MODAL DE UPLOAD DE REFORÇO ---
+// Componente simples e focado, só pra cuidar do modal de upload.
 interface ReforcoUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -72,11 +75,12 @@ function ReforcoUploadModal({ isOpen, onClose, onUpload, isUploading }: ReforcoU
 
   const handleUpload = async () => {
     if (selectedFile) {
-      await onUpload(selectedFile); // A lógica de fechar será tratada no componente pai
-      setSelectedFile(null);
+      await onUpload(selectedFile); // A lógica de fechar o modal vai ser tratada no componente pai, o que é bom pra manter o controle lá.
+      setSelectedFile(null); // Limpa o estado interno depois do upload.
     }
   };
   
+  // Efeito pra limpar o arquivo selecionado se o modal for fechado sem upload.
   useEffect(() => {
     if (!isOpen) {
         setSelectedFile(null);
@@ -138,7 +142,9 @@ function ReforcoUploadModal({ isOpen, onClose, onUpload, isUploading }: ReforcoU
   )
 }
 
-// --- COMPONENTE EDITÁVEL INPUT --- O IDEAL ESSA PARTE SERIA UM COMPONENTE REUSÁVEL
+// --- COMPONENTE EDITÁVEL INPUT ---
+// Esse cara aqui é show! Permite editar o valor direto na célula da tabela.
+// PS: Se precisar usar em outro lugar, já tá quase pronto pra virar um componente reutilizável. deixei aqui como exemplo.
 function EditableInput({ value, onSave, disabled, activityType = 'default' }: EditableInputProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [tempValue, setTempValue] = useState(value.toString())
@@ -146,11 +152,12 @@ function EditableInput({ value, onSave, disabled, activityType = 'default' }: Ed
   const handleSave = () => {
     const numValue = parseInt(tempValue) || 0
     if (numValue !== value) {
-      onSave(numValue)
+      onSave(numValue) // Só salva se o valor realmente mudou, pra evitar chamadas desnecessárias na API.
     }
     setIsEditing(false)
   }
 
+  // Atalhos de teclado pra melhorar a usabilidade. Enter salva, Esc cancela.
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleSave()
@@ -161,6 +168,7 @@ function EditableInput({ value, onSave, disabled, activityType = 'default' }: Ed
     }
   }
 
+  // O blur (clicar fora) também salva. O setTimeout é um truquezinho pra garantir que o 'save' aconteça antes de outras coisas.
   const handleBlur = () => {
     setTimeout(() => {
         if(isEditing) {
@@ -169,7 +177,7 @@ function EditableInput({ value, onSave, disabled, activityType = 'default' }: Ed
     }, 100);
   }
 
- if (isEditing) {
+  if (isEditing) {
     return (
       <Input
         value={tempValue}
@@ -177,12 +185,14 @@ function EditableInput({ value, onSave, disabled, activityType = 'default' }: Ed
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
         className="w-16 h-6 text-center text-xs bg-gray-800 border-blue-500 text-white"
-        autoFocus
+        autoFocus // Foca no input assim que ele aparece.
         disabled={disabled}
       />
     )
   }
 
+  // Define a cor baseada na atividade. Isso dá um feedback visual massa pro usuário. e foi pedido pelo cliente.
+  // Se o valor for zero ou negativo, usa uma cor neutra.
   const colorClasses = value > 0 
     ? getActivityColorClasses(activityType)
     : "text-gray-500"
@@ -199,13 +209,16 @@ function EditableInput({ value, onSave, disabled, activityType = 'default' }: Ed
   )
 }
 
-// --- COMPONENTE EDITÁVEL SELECT --- O IDEAL ESSA PARTE SERIA UM COMPONENTE REUSÁVEL
+// --- COMPONENTE EDITÁVEL SELECT ---
+// Mesma ideia do EditableInput, mas para um dropdown. Super útil pra trocar a categoria na hora.
 function EditableSelect({ value, onSave, disabled }: EditableSelectProps) {
   const [isEditing, setIsEditing] = useState(false)
-  const { categories } = useMaterialCategories()
+  const { categories } = useMaterialCategories() // Puxa as categorias de um hook.
 
+  // useMemo pra otimizar a lista de opções, não precisa recalcular a cada render.
   const options = useMemo(() => {
     const uniqueCategories = [...new Set(categories.map(cat => cat.value))]
+    // Dar uma prioridade pra algumas categorias aparecerem primeiro na lista. Fica mais organizado.
     const priorityCategories = ['SECO', 'FRIO', 'ORGANICO']
     const otherCategories = uniqueCategories.filter(cat => !priorityCategories.includes(cat))
     return [...priorityCategories.filter(cat => uniqueCategories.includes(cat)), ...otherCategories]
@@ -216,6 +229,7 @@ function EditableSelect({ value, onSave, disabled }: EditableSelectProps) {
     setIsEditing(false)
   }
 
+  // Uma funçãozinha pra deixar os badges de categoria coloridos. Fica bem mais visual.
   const getBadgeColor = (category: string) => {
     switch (category) {
       case 'SECO':
@@ -258,8 +272,10 @@ function EditableSelect({ value, onSave, disabled }: EditableSelectProps) {
   )
 }
 
-// --- COMPONENTE PRINCIPAL --- RESPONSAVEL PELA TABELA DE PEDIDOS
+// --- COMPONENTE PRINCIPAL ---
+// O coração da nossa tela de pedidos.
 export default function PedidosTab() {
+  // Estados para controlar filtros, modais, e UI em geral.
   const [searchTerm, setSearchTerm] = useState("")
   const [filtroTipo, setFiltroTipo] = useState("Todos")
   const [showCorteModal, setShowCorteModal] = useState(false)
@@ -268,12 +284,14 @@ export default function PedidosTab() {
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({})
   const [resizing, setResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null)
   
+  // Estado pro zoom da tabela, com persistência no localStorage.
   const [tableScale, setTableScale] = useState(1.0);
   const TABLE_SCALE_KEY = 'pedidos-table-scale';
 
-  // --- NOVA LÓGICA DE ESTADO PARA O MODAL DE IMPRESSÃO ---
+  // Novo estado pro modal de impressão de reforço
   const [isReinforcementModalOpen, setIsReinforcementModalOpen] = useState(false)
 
+  // Hook customizado pra buscar e gerenciar os dados dos pedidos. Abstrai toda a lógica de API.
   const { 
     pedidos, 
     lojas, 
@@ -283,10 +301,11 @@ export default function PedidosTab() {
     updateItemType,
     uploadReforco,
     getItemActivityStatus,
-    activeSeparationId, // Precisamos do ID da separação ativa
+    activeSeparationId, // Precisamos do ID da separação ativa pro modal de impressão.
     refetch
   } = usePedidosData()
 
+  // Recupera o zoom salvo quando o componente carrega.
   useEffect(() => {
     const savedScale = localStorage.getItem(TABLE_SCALE_KEY);
     if (savedScale) {
@@ -294,13 +313,15 @@ export default function PedidosTab() {
     }
   }, []);
 
+  // Salva o zoom no localStorage sempre que ele muda.
   useEffect(() => {
     localStorage.setItem(TABLE_SCALE_KEY, String(tableScale));
   }, [tableScale]);
 
-
+  // useMemo pra não ter que recalcular os tipos de filtro a cada render.
   const availableTypes = useMemo(() => {
     const types = new Set(pedidos.map(item => item.tipoSepar).filter(Boolean))
+    // Ordena os tipos pra ter uma ordem fixa e prioritária no filtro.
     const sortedTypes = Array.from(types).sort((a, b) => {
       const priority = ['SECO', 'FRIO', 'ORGANICO','OVO','REFORÇO']
       const aIndex = priority.indexOf(a)
@@ -314,8 +335,10 @@ export default function PedidosTab() {
     return ['Todos', ...sortedTypes]
   }, [pedidos])
 
+  // Aqui é onde a mágica da filtragem E da ordenação acontece!
   const filteredData = useMemo(() => {
-    return pedidos.filter(item => {
+    // Primeiro, a gente filtra os dados com base na busca e no tipo selecionado.
+    const dataToFilter = pedidos.filter(item => {
       const matchesSearch = searchTerm === "" || 
         item.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.descricao.toLowerCase().includes(searchTerm.toLowerCase())
@@ -324,8 +347,15 @@ export default function PedidosTab() {
       
       return matchesSearch && matchesType
     })
-  }, [pedidos, searchTerm, filtroTipo])
 
+    // ***** ALTERAÇÃO APLICADA AQUI *****
+    // Agora, a gente ordena o resultado do filtro em ordem alfabética pela descrição.
+    // Usar `localeCompare` é a forma correta de comparar strings, lidando bem com acentos e caracteres especiais.
+    return dataToFilter.sort((a, b) => a.descricao.localeCompare(b.descricao));
+
+  }, [pedidos, searchTerm, filtroTipo]) // Só roda de novo se uma dessas dependências mudar.
+
+  // Handler pro upload de reforço.
   const handleReforcoUpload = async (file: File) => {
     setIsUploadingReforco(true)
     try {
@@ -333,8 +363,7 @@ export default function PedidosTab() {
       if (result.success) {
         toast.success('Reforço carregado com sucesso!')
         setIsReforcoModalOpen(false)
-        // --- NOVA LÓGICA ---
-        // Abrir o modal de impressão após o sucesso do upload
+        // Feature legal: abre o modal de impressão logo depois do upload.
         setIsReinforcementModalOpen(true) 
       } else {
         throw new Error(result.error)
@@ -347,29 +376,34 @@ export default function PedidosTab() {
     }
   }
 
+  // Callback pra atualizar os dados depois de uma operação de corte.
+  // useCallback evita que a função seja recriada a cada render.
   const handleCorteExecuted = useCallback(() => {
-    refetch()
+    refetch() // Pede pro nosso hook de dados buscar os dados mais recentes.
     toast.success('Dados atualizados após corte!')
   }, [refetch])
 
+  // Lógica para redimensionamento das colunas da tabela. nao funciona !!!
+  // analisar depois
   const startResize = useCallback((e: React.MouseEvent, column: string) => {
     e.preventDefault()
     const startX = e.clientX
-    const startWidth = columnWidths[column] || 80
+    const startWidth = columnWidths[column] || 80 // 80 é o nosso fallback.
     setResizing({ column, startX, startWidth })
   }, [columnWidths])
 
+  // Efeito que "ouve" o movimento do mouse pra fazer o redimensionamento em si.
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!resizing) return
-      const diff = (e.clientX - resizing.startX) / tableScale;
-      const newWidth = Math.max(60, resizing.startWidth + diff)
+      const diff = (e.clientX - resizing.startX) / tableScale; // Ajusta o movimento com base no zoom da tabela.
+      const newWidth = Math.max(60, resizing.startWidth + diff) // Garante uma largura mínima.
       setColumnWidths(prev => ({
         ...prev,
         [resizing.column]: newWidth
       }))
     }
-    const handleMouseUp = () => setResizing(null)
+    const handleMouseUp = () => setResizing(null) // Para o redimensionamento quando soltar o mouse.
 
     if (resizing) {
       document.addEventListener('mousemove', handleMouseMove)
@@ -381,14 +415,17 @@ export default function PedidosTab() {
     }
   }, [resizing, tableScale])
 
+  // Calcula o total por loja/coluna. useCallback pra otimizar.
   const getTotalByStore = useCallback((store: string) => {
     return filteredData.reduce((total, item) => total + (Number(item[store]) || 0), 0)
   }, [filteredData])
 
+  // Calcula o total geral de todos os itens visíveis.
   const grandTotal = useMemo(() => {
     return lojas.reduce((total, loja) => total + getTotalByStore(loja), 0)
   }, [lojas, getTotalByStore])
 
+  // --- RENDERIZAÇÃO DO COMPONENTE ---
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -396,6 +433,7 @@ export default function PedidosTab() {
       transition={{ duration: 0.5 }}
       className="space-y-4"
     >
+      {/* Cabeçalho com título e botões de ação */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white apple-font">Pedidos</h2>
@@ -412,6 +450,7 @@ export default function PedidosTab() {
             Corte de Produto
           </Button>
 
+          {/* Controle de zoom da tabela, bem bacana pra quem usa telas diferentes. */}
           <div className="flex items-center gap-2 border border-gray-700 bg-gray-800/50 text-white rounded-md h-10 px-3">
             <label htmlFor="table-size-slider" className="text-sm font-medium text-gray-300 whitespace-nowrap">
               Tamanho
@@ -438,6 +477,7 @@ export default function PedidosTab() {
         </div>
       </div>
 
+      {/* Barra de busca e filtros */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <div className="relative flex-1 min-w-64">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -463,6 +503,8 @@ export default function PedidosTab() {
           </Select>
         </div>
       </div>
+      
+      {/* Tratamento de estado de erro */}
       {error && (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
@@ -473,6 +515,7 @@ export default function PedidosTab() {
         </div>
       )}
 
+      {/* Tratamento de estado de carregamento */}
       {isLoading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
@@ -480,17 +523,17 @@ export default function PedidosTab() {
         </div>
       )}
 
-      {/* Tabela com ajuste de layout */}
+      {/* A Tabela em si, com um wrapper para o efeito de zoom/escala */}
       {!isLoading && !error && filteredData.length > 0 && (
-        // Container pai que irá cortar o conteúdo expandido
+        // Container pai que corta o conteúdo expandido, pra escala funcionar direitinho.
         <div className="overflow-hidden rounded-lg">
           <div
-            // Container filho que é escalado e expandido
+            // Container filho que é escalado e expandido.
             className="bg-gray-900/50 border border-gray-800 rounded-lg transition-transform duration-200"
             style={{
               transform: `scale(${tableScale})`,
               transformOrigin: 'top left',
-              // Expande a largura e altura inversamente à escala
+              // Expande a largura e altura inversamente à escala pra preencher o espaço.
               width: `${100 / tableScale}%`,
               height: `${100 / tableScale}%`,
             }}
@@ -500,9 +543,12 @@ export default function PedidosTab() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-gray-700 bg-gray-800/50">
+                      {/* Colunas fixas (sticky) pra facilitar a navegação horizontal */}
                       <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-24 sticky left-0 bg-gray-800/80 z-20">CATEGORIA</TableHead>
                       <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-28 sticky left-24 bg-gray-800/80 z-20">CÓDIGO</TableHead>
                       <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 min-w-60">DESCRIÇÃO</TableHead>
+                      
+                      {/* Colunas dinâmicas para as lojas, com redimensionamento */}
                       {lojas.map((loja) => (
                         <TableHead 
                           key={loja} 
@@ -515,6 +561,7 @@ export default function PedidosTab() {
                               {getTotalByStore(loja).toLocaleString()}
                             </div>
                           </div>
+                          {/* O 'resizer' que só aparece no hover */}
                           <div
                             className="absolute top-0 right-0 w-1 h-full bg-gray-600 cursor-col-resize opacity-0 group-hover:opacity-100 transition-opacity"
                             onMouseDown={(e) => startResize(e, loja)}
@@ -524,8 +571,10 @@ export default function PedidosTab() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {/* Aqui a gente mapeia os dados JÁ FILTRADOS E ORDENADOS para as linhas da tabela */}
                     {filteredData.map((item) => (
                       <TableRow key={item.id} className="border-gray-700 hover:bg-gray-700/30">
+                        {/* Colunas fixas de novo, pra acompanhar o scroll */}
                         <TableCell className="text-center border-r border-gray-700 sticky left-0 bg-gray-900/80 z-10">
                           <EditableSelect
                             value={item.tipoSepar}
@@ -539,6 +588,8 @@ export default function PedidosTab() {
                         <TableCell className="border-r border-gray-700 text-xs text-gray-300 truncate">
                           {item.descricao}
                         </TableCell>
+                        
+                        {/* Células de quantidade para cada loja */}
                         {lojas.map((loja) => (
                           <TableCell 
                             key={loja} 
@@ -563,6 +614,7 @@ export default function PedidosTab() {
         </div>
       )}
 
+      {/* Estado para quando não há dados, com mensagem útil */}
       {!isLoading && !error && filteredData.length === 0 && (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
@@ -578,6 +630,7 @@ export default function PedidosTab() {
         </div>
       )}
 
+      {/* Renderização dos modais que ficam "escondidos" até serem chamados */}
       <CorteModal 
         isOpen={showCorteModal}
         onClose={() => setShowCorteModal(false)} 
@@ -591,7 +644,7 @@ export default function PedidosTab() {
         isUploading={isUploadingReforco}
       />
 
-      {/* --- NOVO MODAL DE IMPRESSÃO DE REFORÇO --- */}
+      {/* Novo modal de impressão de reforço */}
       <ReinforcementPrintModal
         isOpen={isReinforcementModalOpen}
         onClose={() => setIsReinforcementModalOpen(false)}

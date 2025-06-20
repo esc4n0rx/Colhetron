@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -32,7 +31,6 @@ interface ReforcoProcessingResult {
 
 export async function POST(request: NextRequest) {
   try {
-
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -51,7 +49,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-
     const formData = await request.formData()
     const file = formData.get('file') as File
 
@@ -62,14 +59,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-
     if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
       return NextResponse.json(
         { error: 'Apenas arquivos Excel (.xlsx, .xls) ou CSV são aceitos' },
         { status: 400 }
       )
     }
-
 
     const { data: activeSeparation, error: separationError } = await supabaseAdmin
       .from('colhetron_separations')
@@ -85,10 +80,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-
     const fileBuffer = await file.arrayBuffer()
     const uint8Array = new Uint8Array(fileBuffer)
-
 
     let processedData: ProcessedReforcoData
     try {
@@ -101,42 +94,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-
     const reforcoResult = await processReforco({
-        userId: decoded.userId,
-        separationId: activeSeparation.id,
-        processedData,
-        fileName: file.name
-      })
-  
-      if (reforcoResult.error || !reforcoResult.data) {
-        return NextResponse.json(
-          { error: reforcoResult.error || 'Erro ao processar reforço' },
-          { status: 500 }
-        )
-      }
+      userId: decoded.userId,
+      separationId: activeSeparation.id,
+      processedData,
+      fileName: file.name
+    })
+
+    if (reforcoResult.error || !reforcoResult.data) {
+      return NextResponse.json(
+        { error: reforcoResult.error || 'Erro ao processar reforço' },
+        { status: 500 }
+      )
+    }
 
     await logActivity({
-        userId: decoded.userId,
-        action: 'Reforço carregado',
-        details: `Reforço processado: ${reforcoResult.data.processedItems} materiais`,
-        type: 'upload',
-        metadata: {
-          fileName: file.name,
-          separationId: activeSeparation.id,
-          processedItems: reforcoResult.data.processedItems,
-          updatedItems: reforcoResult.data.updatedItems,
-          newItems: reforcoResult.data.newItems,
-          redistributedItems: reforcoResult.data.redistributedItems,
-          processedMaterialCodes: reforcoResult.data.processedMaterialCodes,
-          newMaterialCodes: reforcoResult.data.newMaterialCodes,
-          updatedMaterialCodes: reforcoResult.data.updatedMaterialCodes,
-          redistributedMaterialCodes: reforcoResult.data.redistributedMaterialCodes
-        }
-      })
+      userId: decoded.userId,
+      action: 'Reforço carregado',
+      details: `Reforço processado: ${reforcoResult.data.processedItems} materiais`,
+      type: 'upload',
+      metadata: {
+        fileName: file.name,
+        separationId: activeSeparation.id,
+        processedItems: reforcoResult.data.processedItems,
+        updatedItems: reforcoResult.data.updatedItems,
+        newItems: reforcoResult.data.newItems,
+        redistributedItems: reforcoResult.data.redistributedItems,
+        processedMaterialCodes: reforcoResult.data.processedMaterialCodes,
+        newMaterialCodes: reforcoResult.data.newMaterialCodes,
+        updatedMaterialCodes: reforcoResult.data.updatedMaterialCodes,
+        redistributedMaterialCodes: reforcoResult.data.redistributedMaterialCodes
+      }
+    })
     
-    // --- INÍCIO DA NOVA LÓGICA ---
-    // Salvar os dados processados para impressão futura
     const { data: reinforcementPrint, error: printSaveError } = await supabaseAdmin
       .from('colhetron_reinforcement_prints')
       .insert({
@@ -151,12 +141,11 @@ export async function POST(request: NextRequest) {
     if (printSaveError) {
       console.error('Erro ao salvar dados de reforço para impressão:', printSaveError)
     }
-    // --- FIM DA NOVA LÓGICA ---
 
     return NextResponse.json({
       success: true,
       message: `Reforço processado com sucesso! ${reforcoResult.data.processedItems} materiais processados.`,
-      reinforcementPrintId: reinforcementPrint?.id || null, // Retorna o ID para o frontend
+      reinforcementPrintId: reinforcementPrint?.id || null,
       ...reforcoResult.data
     })
 
@@ -177,26 +166,42 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
     throw new Error('Planilha não encontrada')
   }
 
-  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100')
+  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1')
   const materials: ProcessedReforcoData['materials'] = []
   const stores: string[] = []
   const quantities: ProcessedReforcoData['quantities'] = []
 
-
-  for (let col = 2; col <= range.e.c; col++) { 
-    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
-    const cell = worksheet[cellAddress]
-    
-    if (cell && cell.v && typeof cell.v === 'string' && cell.v.trim()) {
-      stores.push(cell.v.trim())
+  // Encontrar última linha com dados na coluna A (material)
+  let lastMaterialRow = 0
+  for (let row = 1; row <= range.e.r; row++) {
+    const materialCodeCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
+    if (materialCodeCell && materialCodeCell.v && String(materialCodeCell.v).trim()) {
+      lastMaterialRow = row
     }
   }
 
+  if (lastMaterialRow === 0) {
+    throw new Error('Nenhum material encontrado na coluna A')
+  }
 
-  for (let row = 1; row <= Math.min(range.e.r, 65); row++) { 
+  // Encontrar última coluna com dados na linha 1 (lojas) - começa na coluna C (índice 2)
+  let lastStoreCol = 1 // Começar em B para garantir que tem pelo menos coluna C
+  for (let col = 2; col <= range.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
+    const cell = worksheet[cellAddress]
+    if (cell && cell.v && typeof cell.v === 'string' && cell.v.trim()) {
+      stores.push(cell.v.trim())
+      lastStoreCol = col
+    }
+  }
 
+  if (stores.length === 0) {
+    throw new Error('Nenhuma loja encontrada na linha 1 a partir da coluna C')
+  }
+
+  // Processar dados dos materiais (de 2 até a última linha encontrada)
+  for (let row = 1; row <= lastMaterialRow; row++) {
     const materialCodeCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
-
     const descriptionCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 1 })]
 
     if (materialCodeCell && materialCodeCell.v && descriptionCell && descriptionCell.v) {
@@ -211,22 +216,24 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
           rowNumber: row + 1 
         })
 
-
-        for (let col = 2; col < 2 + stores.length; col++) {
+        // Extrair quantidades para cada loja
+        for (let col = 2; col <= lastStoreCol; col++) {
           const quantityCell = worksheet[XLSX.utils.encode_cell({ r: row, c: col })]
-          const storeCode = stores[col - 2]
+          const storeIndex = col - 2
           
-          let quantity = 0
-          if (quantityCell && quantityCell.v !== undefined && quantityCell.v !== null) {
-            quantity = Number(quantityCell.v)
-            if (isNaN(quantity)) quantity = 0
+          if (storeIndex < stores.length) {
+            let quantity = 0
+            if (quantityCell && quantityCell.v !== undefined && quantityCell.v !== null) {
+              quantity = Number(quantityCell.v)
+              if (isNaN(quantity)) quantity = 0
+            }
+            
+            quantities.push({
+              materialIndex,
+              storeCode: stores[storeIndex],
+              quantity
+            })
           }
-          
-          quantities.push({
-            materialIndex,
-            storeCode,
-            quantity
-          })
         }
       }
     }
@@ -252,18 +259,21 @@ async function processReforco(params: {
   const { userId, separationId, processedData, fileName } = params
 
   try {
-    const { data: userMaterials, error: materialsError } = await supabaseAdmin
+    // Buscar cadastro de materiais pelo código (sem filtro de user_id)
+    // para pegar a categoria correta da coluna diurno
+    const materialCodes = processedData.materials.map(m => m.code)
+    const { data: globalMaterials, error: materialsError } = await supabaseAdmin
       .from('colhetron_materiais')
       .select('material, diurno')
-      .eq('user_id', userId)
+      .in('material', materialCodes)
 
     if (materialsError) {
       throw new Error(`Erro ao buscar cadastro de materiais: ${materialsError.message}`)
     }
 
     const materialTypeMap = new Map<string, string>()
-    userMaterials.forEach(m => {
-      materialTypeMap.set(m.material, m.diurno)
+    globalMaterials.forEach(m => {
+      materialTypeMap.set(m.material, m.diurno || 'SECO')
     })
 
     let processedItems = 0
@@ -275,7 +285,6 @@ async function processReforco(params: {
     const newMaterialCodes: string[] = []
     const updatedMaterialCodes: string[] = []
     const redistributedMaterialCodes: string[] = []
-
 
     for (const material of processedData.materials) {
       try {
@@ -346,20 +355,16 @@ async function processReforco(params: {
           if (currentQuantity === 0 && reforcoQuantity > 0) {
             newQuantity = reforcoQuantity
           } else if (currentQuantity > 0 && reforcoQuantity > 0) {
-
             newQuantity = currentQuantity + reforcoQuantity
           } else if (currentQuantity > 0 && reforcoQuantity === 0) {
             newQuantity = 0
             redistributedItems++
             hadRedistribution = true
           } else {
-
             newQuantity = 0
           }
 
-
           if (currentQuantitiesMap.has(reforcoQty.storeCode)) {
-
             const { error: updateError } = await supabaseAdmin
               .from('colhetron_separation_quantities')
               .update({ quantity: newQuantity })
@@ -370,7 +375,6 @@ async function processReforco(params: {
               console.error(`Erro ao atualizar quantidade ${material.code}-${reforcoQty.storeCode}:`, updateError)
             }
           } else if (newQuantity > 0) {
-
             const { error: insertError } = await supabaseAdmin
               .from('colhetron_separation_quantities')
               .insert([{
@@ -384,7 +388,6 @@ async function processReforco(params: {
             }
           }
         }
-
 
         processedMaterialCodes.push(material.code)
         
@@ -406,30 +409,28 @@ async function processReforco(params: {
         total_items: supabaseAdmin.rpc('get_separation_items_count', { sep_id: separationId })
       })
       .eq('id', separationId)
+      if (updateSeparationError) {
+  console.error('Erro ao atualizar totais da separação:', updateSeparationError)
+}
 
-    if (updateSeparationError) {
-      console.error('Erro ao atualizar totais da separação:', updateSeparationError)
-    }
-
-    return {
-      data: {
-        processedItems,
-        updatedItems,
-        newItems,
-        redistributedItems,
-        processedMaterialCodes,
-        newMaterialCodes,
-        updatedMaterialCodes,
-        redistributedMaterialCodes
-      },
-      error: null
-    }
-
-  } catch (error) {
-    console.error('Erro no processamento do reforço:', error)
-    return {
-      data: null,
-      error: error instanceof Error ? error.message : 'Erro desconhecido no processamento'
-    }
-  }
+return {
+  data: {
+    processedItems,
+    updatedItems,
+    newItems,
+    redistributedItems,
+    processedMaterialCodes,
+    newMaterialCodes,
+    updatedMaterialCodes,
+    redistributedMaterialCodes
+  },
+  error: null
+}
+} catch (error) {
+console.error('Erro no processamento do reforço:', error)
+return {
+data: null,
+error: error instanceof Error ? error.message : 'Erro desconhecido no processamento'
+}
+}
 }

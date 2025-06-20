@@ -1,11 +1,8 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-logger'
 import * as XLSX from 'xlsx'
-
-
 
 interface ProcessedData {
   materials: Array<{
@@ -23,7 +20,6 @@ interface ProcessedData {
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -31,7 +27,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
-
 
     const token = authHeader.split(' ')[1]
     const decoded = verifyToken(token)
@@ -43,7 +38,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Processar dados do formulário
     const formData = await request.formData()
     const file = formData.get('file') as File
     const type = formData.get('type') as string
@@ -56,7 +50,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar tipo
     if (!['SP', 'ES', 'RJ'].includes(type)) {
       return NextResponse.json(
         { error: 'Tipo inválido' },
@@ -64,7 +57,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar arquivo Excel
     if (!file.name.endsWith('.xlsx')) {
       return NextResponse.json(
         { error: 'Apenas arquivos .xlsx são aceitos' },
@@ -72,11 +64,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Converter arquivo para buffer
+
     const fileBuffer = await file.arrayBuffer()
     const uint8Array = new Uint8Array(fileBuffer)
 
-    // Processar planilha Excel
+
     let processedData: ProcessedData
     try {
       processedData = await processExcelFile(uint8Array)
@@ -88,7 +80,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar se há uma separação ativa para o usuário
     const { data: existingSeparation } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -103,7 +94,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Iniciar transação para criar separação
     const separationResult = await createSeparation({
       userId: decoded.userId,
       type,
@@ -118,6 +108,7 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
     await logActivity({
       userId: decoded.userId,
       action: 'Nova separação criada',
@@ -137,8 +128,6 @@ export async function POST(request: NextRequest) {
       separation: separationResult.data
     })
 
-    
-
   } catch (error) {
     console.error('Erro no upload:', error)
     return NextResponse.json(
@@ -146,8 +135,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-
-  
 }
 
 async function processExcelFile(buffer: Uint8Array): Promise<ProcessedData> {
@@ -158,23 +145,41 @@ async function processExcelFile(buffer: Uint8Array): Promise<ProcessedData> {
     throw new Error('Planilha não encontrada')
   }
 
-  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100')
+  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1')
   const materials: ProcessedData['materials'] = []
   const stores: string[] = []
   const quantities: ProcessedData['quantities'] = []
 
-  // Extrair nomes das lojas da primeira linha (C1 até BL1)
-  for (let col = 2; col <= range.e.c; col++) { // Começa na coluna C (índice 2)
-    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
-    const cell = worksheet[cellAddress]
-    
-    if (cell && cell.v && typeof cell.v === 'string' && cell.v.trim()) {
-      stores.push(cell.v.trim())
+  // Encontrar última linha com dados na coluna A (material)
+  let lastMaterialRow = 0
+  for (let row = 1; row <= range.e.r; row++) {
+    const materialCodeCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
+    if (materialCodeCell && materialCodeCell.v && String(materialCodeCell.v).trim()) {
+      lastMaterialRow = row
     }
   }
 
-  // Processar dados dos materiais (a partir da linha 2)
-  for (let row = 1; row <= Math.min(range.e.r, 65); row++) { // Até linha 65 como especificado
+  if (lastMaterialRow === 0) {
+    throw new Error('Nenhum material encontrado na coluna A')
+  }
+
+  // Encontrar última coluna com dados na linha 1 (lojas) - começa na coluna C (índice 2)
+  let lastStoreCol = 1 // Começar em B para garantir que tem pelo menos coluna C
+  for (let col = 2; col <= range.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
+    const cell = worksheet[cellAddress]
+    if (cell && cell.v && typeof cell.v === 'string' && cell.v.trim()) {
+      stores.push(cell.v.trim())
+      lastStoreCol = col
+    }
+  }
+
+  if (stores.length === 0) {
+    throw new Error('Nenhuma loja encontrada na linha 1 a partir da coluna C')
+  }
+
+  // Processar dados dos materiais (de 2 até a última linha encontrada)
+  for (let row = 1; row <= lastMaterialRow; row++) {
     // Coluna A - Material Code
     const materialCodeCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
     // Coluna B - Description
@@ -193,16 +198,17 @@ async function processExcelFile(buffer: Uint8Array): Promise<ProcessedData> {
         })
 
         // Extrair quantidades para cada loja
-        for (let col = 2; col < 2 + stores.length; col++) {
+        for (let col = 2; col <= lastStoreCol; col++) {
           const quantityCell = worksheet[XLSX.utils.encode_cell({ r: row, c: col })]
+          const storeIndex = col - 2
           
-          if (quantityCell && quantityCell.v) {
+          if (storeIndex < stores.length && quantityCell && quantityCell.v) {
             const quantity = Number(quantityCell.v)
             
             if (!isNaN(quantity) && quantity > 0) {
               quantities.push({
                 materialIndex,
-                storeCode: stores[col - 2],
+                storeCode: stores[storeIndex],
                 quantity
               })
             }
@@ -233,20 +239,22 @@ async function createSeparation(params: {
   const { userId, type, date, fileName, processedData } = params
 
   try {
-    // Busca o cadastro de materiais do usuário para fazer o mapeamento
-    const { data: userMaterials, error: materialsError } = await supabaseAdmin
+    // Buscar cadastro de materiais pelo código (sem filtro de user_id)
+    // para pegar a categoria correta da coluna diurno
+    const materialCodes = processedData.materials.map(m => m.code)
+    const { data: globalMaterials, error: materialsError } = await supabaseAdmin
       .from('colhetron_materiais')
       .select('material, diurno')
-      .eq('user_id', userId);
+      .in('material', materialCodes)
 
     if (materialsError) {
-      throw new Error(`Erro ao buscar cadastro de materiais: ${materialsError.message}`);
+      throw new Error(`Erro ao buscar cadastro de materiais: ${materialsError.message}`)
     }
 
-    const materialTypeMap = new Map<string, string>();
-    userMaterials.forEach(m => {
-      materialTypeMap.set(m.material, m.diurno);
-    });
+    const materialTypeMap = new Map<string, string>()
+    globalMaterials.forEach(m => {
+      materialTypeMap.set(m.material, m.diurno || 'SECO')
+    })
 
     // Criar separação principal
     const { data: separation, error: separationError } = await supabaseAdmin
@@ -269,7 +277,7 @@ async function createSeparation(params: {
       throw new Error(`Erro ao criar separação: ${separationError.message}`)
     }
 
-    // Inserir materiais em lotes
+    // Inserir materiais em lotes com a categoria correta
     const batchSize = 100
     const materialBatches = []
     
@@ -279,7 +287,7 @@ async function createSeparation(params: {
         material_code: material.code,
         description: material.description,
         row_number: material.rowNumber,
-        type_separation: materialTypeMap.get(material.code) || 'SECO' // Default 'SECO' se não encontrado
+        type_separation: materialTypeMap.get(material.code) || 'SECO'
       }))
       materialBatches.push(batch)
     }
@@ -325,6 +333,4 @@ async function createSeparation(params: {
     console.error('Erro na criação da separação:', error)
     return { data: null, error: error instanceof Error ? error.message : 'Erro desconhecido' }
   }
-
-  
 }
