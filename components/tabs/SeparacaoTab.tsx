@@ -1,3 +1,4 @@
+// components/tabs/SeparacaoTab.tsx (AJUSTADO)
 
 "use client"
 
@@ -27,7 +28,6 @@ export default function SeparacaoTab() {
     return ['Todos', ...sortedTypes]
   }, [data])
 
-
   const availableZones = useMemo(() => {
     if (filtroTipo === "Todos") return ["Todas"]
     
@@ -39,9 +39,8 @@ export default function SeparacaoTab() {
       }
     })
     
-    return ['Todas', ...Array.from(zones).sort()]
+    return ['Todos', ...Array.from(zones).sort()]
   }, [lojas, filtroTipo])
-
 
   const availableSubzones = useMemo(() => {
     if (filtroTipo === "Todos" || filtroZona === "Todas" || filtroTipo === 'FRIO') {
@@ -55,15 +54,13 @@ export default function SeparacaoTab() {
       }
     })
     
-    return ['Todas', ...Array.from(subzones).sort()]
+    return ['Todos', ...Array.from(subzones).sort()]
   }, [lojas, filtroZona, filtroTipo])
-
 
   const filteredData = useMemo(() => {
     if (filtroTipo === "Todos") return data
     return data.filter(item => item.tipoSepar === filtroTipo)
   }, [data, filtroTipo])
-
 
   const orderedStores = useMemo(() => {
     if (filtroTipo === "Todos") return []
@@ -77,7 +74,6 @@ export default function SeparacaoTab() {
       })
     }
     
-
     if (filtroSubzona !== "Todas" && filtroTipo === 'SECO') {
       stores = stores.filter(loja => loja.subzonaSeco === filtroSubzona)
     }
@@ -197,17 +193,13 @@ export default function SeparacaoTab() {
       </div>
     `
 
+    // AJUSTE NA IMPRESSÃO: Cabeçalho simplificado com apenas uma linha
     const tableHeader = `
       <thead>
         <tr>
-          <th rowspan="2" style="vertical-align: middle;">MATERIAL SEPARAÇÃO</th>
+          <th>MATERIAL SEPARAÇÃO</th>
           ${orderedStores.map(store => `
             <th class="text-center store-header">${store.prefixo}</th>
-          `).join('')}
-        </tr>
-        <tr>
-          ${orderedStores.map(store => `
-            <th class="text-center" style="font-size: 7pt;">${store.nome.substring(0, 15)}</th>
           `).join('')}
         </tr>
       </thead>
@@ -226,6 +218,7 @@ export default function SeparacaoTab() {
       </tbody>
     `
 
+    // AJUSTE NA IMPRESSÃO: Rodapé simplificado
     const tableFooter = `
     <tfoot>
       <tr>
@@ -267,15 +260,14 @@ export default function SeparacaoTab() {
       </html>
     `
 
-    const printWindow = window.open('', '_blank')
+    const printWindow = window.open('', '_blank');
     if (printWindow) {
-      printWindow.document.write(printContent)
-      printWindow.document.close()
-      printWindow.focus()
-      printWindow.print()
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
     }
-  }, [filteredData, orderedStores, totals, filtroTipo, filtroZona, filtroSubzona])
-
+  }, [filteredData, orderedStores, totals, filtroTipo, filtroZona, filtroSubzona]);
 
   const handleTipoChange = (tipo: typeof filtroTipo) => {
     setFiltroTipo(tipo)
@@ -338,9 +330,7 @@ export default function SeparacaoTab() {
         </Button>
       </div>
 
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
         <Card className="bg-gray-900/50 border-gray-800 p-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -407,7 +397,7 @@ export default function SeparacaoTab() {
                   size="sm"
                   variant={filtroSubzona === subzona ? "default" : "outline"}
                   onClick={() => setFiltroSubzona(subzona)}
-                  disabled={filtroTipo !== "SECO" || filtroZona === "Todas"}
+                  disabled={filtroTipo !== "SECO" || filtroZona === "Todos"}
                   className={`text-xs ${
                     filtroSubzona === subzona 
                       ? "bg-blue-600 text-white" 
@@ -422,34 +412,19 @@ export default function SeparacaoTab() {
         </Card>
       </div>
 
-
       <Card className="bg-gray-900/50 border-gray-800">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
+                {/* CABEÇALHO AJUSTADO: Apenas uma linha */}
                 <TableRow className="border-gray-700 bg-gray-800/50">
-                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 w-8">
-                    Quant. Volumes
-                  </TableHead>
                   <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 min-w-80">
                     MATERIAL SEPARAÇÃO
                   </TableHead>
-                  {orderedStores.map((store, index) => (
-                    <TableHead
-                      key={store.prefixo}
-                      className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 w-12"
-                    >
-                      -{index + 1}
-                    </TableHead>
-                  ))}
-                </TableRow>
-                <TableRow className="border-gray-700 bg-gray-800/30">
-                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700"></TableHead>
-                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700"></TableHead>
                   {orderedStores.map((store) => (
                     <TableHead
-                      key={`${store.prefixo}-name`}
+                      key={store.prefixo}
                       className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 w-12"
                     >
                       {store.prefixo}
@@ -461,7 +436,7 @@ export default function SeparacaoTab() {
                 {filteredData.length > 0 ? (
                   filteredData.map((item, index) => (
                     <TableRow key={item.id} className="border-gray-700 hover:bg-gray-800/30 transition-colors">
-                      <TableCell className="text-white text-xs border-r border-gray-700 font-medium"></TableCell>
+                      {/* CÉLULA REMOVIDA: A célula vazia para 'Quant. Volumes' foi retirada */}
                       <TableCell className="text-white text-xs border-r border-gray-700">{item.material}</TableCell>
                       {orderedStores.map((store) => (
                         <TableCell key={store.prefixo} className="text-center text-xs border-r border-gray-700">
@@ -480,7 +455,8 @@ export default function SeparacaoTab() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={orderedStores.length + 2} className="text-center text-gray-400 py-8">
+                    {/* COLSPAN AJUSTADO: +1 para compensar a coluna removida */}
+                    <TableCell colSpan={orderedStores.length + 1} className="text-center text-gray-400 py-8">
                       {filtroTipo === "Todos" 
                         ? "Selecione um tipo de separação para visualizar os dados"
                         : "Nenhum material encontrado para os filtros selecionados"
@@ -492,7 +468,8 @@ export default function SeparacaoTab() {
               {filteredData.length > 0 && (
                 <tfoot>
                   <TableRow className="bg-gray-800 border-t-2 border-gray-700">
-                    <TableHead colSpan={2} className="text-right text-white font-bold text-sm pr-4">
+                    {/* COLSPAN AJUSTADO: De 2 para 1 */}
+                    <TableHead colSpan={1} className="text-right text-white font-bold text-sm pr-4">
                       Total Geral
                     </TableHead>
                     {orderedStores.map((store) => (
