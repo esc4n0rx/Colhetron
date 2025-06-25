@@ -259,8 +259,25 @@ async function processReforco(params: {
   const { userId, separationId, processedData, fileName } = params
 
   try {
-    // Buscar cadastro de materiais pelo código (sem filtro de user_id)
-    // para pegar a categoria correta da coluna diurno
+    // PRIMEIRO: Buscar TODAS as lojas da separação ativa
+    const { data: allSeparationStores, error: storesError } = await supabaseAdmin
+      .from('colhetron_separation_quantities')
+      .select('store_code')
+      .in('item_id', 
+        await supabaseAdmin
+          .from('colhetron_separation_items')
+          .select('id')
+          .eq('separation_id', separationId)
+          .then(({ data }) => data?.map(item => item.id) || [])
+      )
+
+    if (storesError) {
+      throw new Error(`Erro ao buscar lojas da separação: ${storesError.message}`)
+    }
+
+    const allExistingStores = [...new Set(allSeparationStores.map(s => s.store_code))]
+
+    // Buscar cadastro de materiais pelo código para pegar a categoria correta da coluna diurno
     const materialCodes = processedData.materials.map(m => m.code)
     const { data: globalMaterials, error: materialsError } = await supabaseAdmin
       .from('colhetron_materiais')
@@ -327,6 +344,7 @@ async function processReforco(params: {
           updatedMaterialCodes.push(material.code)
         }
 
+        // Buscar TODAS as quantidades atuais deste material (todas as lojas)
         const { data: currentQuantities, error: quantitiesError } = await supabaseAdmin
           .from('colhetron_separation_quantities')
           .select('store_code, quantity')
@@ -342,49 +360,68 @@ async function processReforco(params: {
           currentQuantitiesMap.set(q.store_code, q.quantity)
         })
 
+        // Buscar as quantidades da planilha para este material
         const materialQuantities = processedData.quantities.filter(q => q.materialIndex === processedData.materials.indexOf(material))
+        const reforcoQuantitiesMap = new Map<string, number>()
         
+        materialQuantities.forEach(rq => {
+          reforcoQuantitiesMap.set(rq.storeCode, rq.quantity)
+        })
+
         let hadRedistribution = false
 
-        for (const reforcoQty of materialQuantities) {
-          const currentQuantity = currentQuantitiesMap.get(reforcoQty.storeCode) || 0
-          const reforcoQuantity = reforcoQty.quantity
+        // LÓGICA CORRIGIDA: Processar TODAS as lojas (da planilha E as que já existem)
+        const allStoresToProcess = new Set([
+          ...processedData.stores, // Lojas da planilha de reforço
+          ...Array.from(currentQuantitiesMap.keys()) // Lojas que já tinham quantidade
+        ])
+
+        for (const storeCode of allStoresToProcess) {
+          const currentQuantity = currentQuantitiesMap.get(storeCode) || 0
+          const reforcoQuantity = reforcoQuantitiesMap.get(storeCode) || 0
           let newQuantity = 0
 
-          // Aplicar regras de negócio para atualizar a quantidade
+          // APLICAR REGRAS DE NEGÓCIO CORRETAS:
           if (currentQuantity === 0 && reforcoQuantity > 0) {
+            // Se antes tinha 0, agora tem X -> adicionar X
             newQuantity = reforcoQuantity
           } else if (currentQuantity > 0 && reforcoQuantity > 0) {
+            // Se antes tinha X, agora tem Y -> somar (X + Y)
             newQuantity = currentQuantity + reforcoQuantity
           } else if (currentQuantity > 0 && reforcoQuantity === 0) {
+            // Se antes tinha X, agora está vazio/zero -> zerar (redistribuição)
             newQuantity = 0
             redistributedItems++
             hadRedistribution = true
           } else {
+            // Se antes tinha 0 e continua 0 -> manter 0
             newQuantity = 0
           }
 
-          if (currentQuantitiesMap.has(reforcoQty.storeCode)) {
+          // Atualizar ou inserir a quantidade no banco
+          if (currentQuantitiesMap.has(storeCode)) {
+            // Atualizar quantidade existente
             const { error: updateError } = await supabaseAdmin
               .from('colhetron_separation_quantities')
               .update({ quantity: newQuantity })
               .eq('item_id', itemId)
-              .eq('store_code', reforcoQty.storeCode)
+              .eq('store_code', storeCode)
 
             if (updateError) {
-              console.error(`Erro ao atualizar quantidade ${material.code}-${reforcoQty.storeCode}:`, updateError)
+              console.error(`Erro ao atualizar quantidade ${material.code}-${storeCode}:`, updateError)
             }
           } else if (newQuantity > 0) {
+            // Inserir nova quantidade (apenas se > 0)
             const { error: insertError } = await supabaseAdmin
               .from('colhetron_separation_quantities')
               .insert([{
                 item_id: itemId,
-                store_code: reforcoQty.storeCode,
+                store_code: storeCode,
                 quantity: newQuantity
               }])
 
             if (insertError) {
-              console.error(`Erro ao inserir quantidade ${material.code}-${reforcoQty.storeCode}:`, insertError)
+              console.error(`Erro ao inserir quantidade ${material.code}-${storeCode}:`, insertError)
             }
           }
         }
@@ -403,34 +440,41 @@ async function processReforco(params: {
       }
     }
 
+    // Atualizar totais da separação
     const { error: updateSeparationError } = await supabaseAdmin
       .from('colhetron_separations')
       .update({
-        total_items: supabaseAdmin.rpc('get_separation_items_count', { sep_id: separationId })
+        total_items: await supabaseAdmin
+          .from('colhetron_separation_items')
+          .select('id', { count: 'exact' })
+          .eq('separation_id', separationId)
+          .then(({ count }) => count || 0)
       })
       .eq('id', separationId)
-      if (updateSeparationError) {
-  console.error('Erro ao atualizar totais da separação:', updateSeparationError)
-}
 
-return {
-  data: {
-    processedItems,
-    updatedItems,
-    newItems,
-    redistributedItems,
-    processedMaterialCodes,
-    newMaterialCodes,
-    updatedMaterialCodes,
-    redistributedMaterialCodes
-  },
-  error: null
-}
-} catch (error) {
-console.error('Erro no processamento do reforço:', error)
-return {
-data: null,
-error: error instanceof Error ? error.message : 'Erro desconhecido no processamento'
-}
-}
+    if (updateSeparationError) {
+      console.error('Erro ao atualizar totais da separação:', updateSeparationError)
+    }
+
+    return {
+      data: {
+        processedItems,
+        updatedItems,
+        newItems,
+        redistributedItems,
+        processedMaterialCodes,
+        newMaterialCodes,
+        updatedMaterialCodes,
+        redistributedMaterialCodes
+      },
+      error: null
+    }
+
+  } catch (error) {
+    console.error('Erro no processamento do reforço:', error)
+    return {
+      data: null,
+      error: error instanceof Error ? error.message : 'Erro desconhecido no processamento'
+    }
+  }
 }
