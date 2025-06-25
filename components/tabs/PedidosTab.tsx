@@ -11,7 +11,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
-import { Search, Filter, Loader2, Upload, AlertCircle, Scissors, Printer } from 'lucide-react'
+import { Search, Filter, Loader2, Upload, AlertCircle, Scissors, Printer, Grape } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { usePedidosData } from '@/hooks/usePedidosData'
 import { useMaterialCategories } from '@/hooks/useMaterialCategories'
 import CorteModal from '@/components/modals/CorteModal'
+import MelanciaUploadModal from '@/components/modals/MelanciaUploadModal'
 // --- NOVA IMPORTAÇÃO DO MODAL DE IMPRESSÃO ---
 import ReinforcementPrintModal from '@/components/modals/ReinforcementPrintModal'
 import { getActivityColorClasses } from '@/lib/activity-helpers'
@@ -282,6 +283,8 @@ export default function PedidosTab() {
   const [isReforcoModalOpen, setIsReforcoModalOpen] = useState(false)
   const [isUploadingReforco, setIsUploadingReforco] = useState(false)
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>({})
+  const [isMelanciaModalOpen, setIsMelanciaModalOpen] = useState(false)
+  const [isUploadingMelancia, setIsUploadingMelancia] = useState(false)
   const [resizing, setResizing] = useState<{ column: string; startX: number; startWidth: number } | null>(null)
   
   // Estado pro zoom da tabela, com persistência no localStorage.
@@ -300,8 +303,9 @@ export default function PedidosTab() {
     updateQuantity, 
     updateItemType,
     uploadReforco,
+    uploadMelancia,
     getItemActivityStatus,
-    activeSeparationId, // Precisamos do ID da separação ativa pro modal de impressão.
+    activeSeparationId,
     refetch
   } = usePedidosData()
 
@@ -392,6 +396,30 @@ export default function PedidosTab() {
     setResizing({ column, startX, startWidth })
   }, [columnWidths])
 
+
+  // --- NOVO HANDLER PARA MELANCIA ---
+const handleMelanciaUpload = async (file: File) => {
+  setIsUploadingMelancia(true)
+try {
+    const result = await uploadMelancia(file)
+    if (result.success) {
+    let message = "Separação de melancia carregada! ${result.updatedStores} lojas atualizadas"
+    if (result.notFoundStores && result.notFoundStores.length > 0) {
+    message += `. Lojas não encontradas: ${result.notFoundStores.join(', ')}`
+    }
+    toast.success(message)
+    setIsMelanciaModalOpen(false)
+  } else {
+  throw new Error(result.error)
+  }
+    } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar separação de melancia'
+    toast.error(errorMessage)
+    } finally {
+    setIsUploadingMelancia(false)
+    }
+}
+
   // Efeito que "ouve" o movimento do mouse pra fazer o redimensionamento em si.
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -466,6 +494,15 @@ export default function PedidosTab() {
               className="w-24 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
             />
           </div>
+
+          <Button 
+            onClick={() => setIsMelanciaModalOpen(true)}
+            variant="outline"
+            className="border-green-600 text-green-400 hover:bg-green-600 hover:text-white"
+          >
+            <Grape className="w-4 h-4 mr-2" />
+            Carregar Melancia
+          </Button>
 
           <Button 
             onClick={() => setIsReforcoModalOpen(true)}
@@ -642,6 +679,14 @@ export default function PedidosTab() {
         onClose={() => setIsReforcoModalOpen(false)}
         onUpload={handleReforcoUpload}
         isUploading={isUploadingReforco}
+      />
+
+      {/* --- NOVO MODAL PARA MELANCIA --- */}
+      <MelanciaUploadModal
+        isOpen={isMelanciaModalOpen}
+        onClose={() => setIsMelanciaModalOpen(false)}
+        onUpload={handleMelanciaUpload}
+        isUploading={isUploadingMelancia}
       />
 
       {/* Novo modal de impressão de reforço */}
