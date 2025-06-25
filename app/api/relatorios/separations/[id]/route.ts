@@ -4,15 +4,17 @@ import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
-  console.log('🚀 [API DETALHES] Iniciando requisição para separação:', params.id)
-  
   try {
+    // Aguardar params antes de acessar suas propriedades
+    const { id: separationId } = await params
+    console.log('🚀 [API DETALHES] Iniciando requisição para separação:', separationId)
+    
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       console.log('❌ [API DETALHES] Token de autorização ausente')
@@ -27,16 +29,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     console.log('✅ [API DETALHES] Token válido para usuário:', decoded.userId)
-
-    const separationId = params.id
     console.log('🔍 [API DETALHES] Buscando separação ID:', separationId)
 
-    // Buscar dados da separação
+    // Buscar dados da separação - REMOVIDO filtro de user_id para permitir acesso a qualquer separação
     const { data: separation, error: separationError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id, type, date, status, file_name, total_items, total_stores, created_at, updated_at, user_id')
       .eq('id', separationId)
-      .eq('user_id', decoded.userId)
       .single()
 
     if (separationError || !separation) {
@@ -46,11 +45,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     console.log('✅ [API DETALHES] Separação encontrada:', separation.file_name)
 
-    // Buscar dados do usuário
+    // Buscar dados do usuário que criou a separação
     const { data: userData, error: userError } = await supabaseAdmin
       .from('colhetron_user')
       .select('name, email')
-      .eq('id', decoded.userId)
+      .eq('id', separation.user_id)
       .single()
 
     if (userError) {
@@ -83,12 +82,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     console.log('✅ [API DETALHES] Itens encontrados:', items?.length || 0)
 
-    // ✅ NOVO: Buscar histórico de atividades da separação
+    // Buscar histórico de atividades da separação
     console.log('🔍 [API DETALHES] Buscando atividades da separação...')
     const { data: activities, error: activitiesError } = await supabaseAdmin
       .from('colhetron_user_activities')
       .select('*')
-      .eq('user_id', decoded.userId)
+      .eq('user_id', separation.user_id)
       .eq('metadata->>separationId', separationId) // Filtra pelo separationId dentro do JSONB
       .order('created_at', { ascending: false })
       .limit(100) // Limita para evitar sobrecarga
@@ -113,8 +112,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       })) || [],
       activities: activities || [] // Adiciona as atividades à resposta
     }
-
-    //console.log('📦 [API DETALHES] Resposta formatada com', detailedSeparation.items.length, 'itens e', detailedSeparation.activities.length, 'atividades')
 
     return NextResponse.json(detailedSeparation)
 
