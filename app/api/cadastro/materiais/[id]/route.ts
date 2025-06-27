@@ -1,4 +1,3 @@
-// app/api/cadastro/materiais/[id]/route.ts (ATUALIZADO)
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -31,7 +30,6 @@ export async function PUT(
     const updates = await request.json()
     const validatedData = updateMaterialSchema.parse(updates)
 
-    // Buscar material existente
     const { data: existingMaterial, error: checkError } = await supabaseAdmin
       .from('colhetron_materiais')
       .select('*')
@@ -42,7 +40,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Material não encontrado' }, { status: 404 })
     }
 
-    // Verificar conflito de código (se o código está sendo alterado)
     if (validatedData.material && validatedData.material !== existingMaterial.material) {
       const { data: conflictMaterial } = await supabaseAdmin
         .from('colhetron_materiais')
@@ -58,22 +55,18 @@ export async function PUT(
       }
     }
 
-    // Preparar dados para atualização
     const updateData: any = {
       ...validatedData,
       updated_at: new Date().toISOString()
     }
 
-    // Se categoria foi fornecida, atualizar ambas as colunas
     if (validatedData.category) {
       updateData.diurno = validatedData.category
       updateData.noturno = validatedData.category
     }
 
-    // Remover category do updateData (campo virtual)
     delete updateData.category
 
-    // Atualizar material
     const { data: updatedMaterial, error: updateError } = await supabaseAdmin
       .from('colhetron_materiais')
       .update(updateData)
@@ -86,7 +79,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Erro ao atualizar material' }, { status: 500 })
     }
 
-    // Log da atividade de alteração de categoria
     if (validatedData.category && validatedData.category !== existingMaterial.diurno) {
       await logActivity({
         userId: decoded.userId,
@@ -96,7 +88,6 @@ export async function PUT(
       })
     }
 
-    // Retornar material no formato esperado
     const formattedMaterial = {
       id: updatedMaterial.id,
       material: updatedMaterial.material,

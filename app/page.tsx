@@ -1,4 +1,3 @@
-// app/page.tsx (versão alternativa mais limpa)
 "use client"
 
 import { useAuth } from "@/contexts/AuthContext"
@@ -17,7 +16,6 @@ export default function Home() {
     }
   }, [user, isLoading, router])
 
-  // Loading inicial do sistema
   if (isLoading) {
     return (
       <Loading 
@@ -28,7 +26,6 @@ export default function Home() {
     )
   }
 
-  // Usuário logado - redirecionando
   if (user) {
     return (
       <Loading 
@@ -38,7 +35,5 @@ export default function Home() {
       />
     )
   }
-
-  // Usuário não logado - mostrar página de autenticação
   return <AuthPage />
 }

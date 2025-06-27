@@ -1,4 +1,3 @@
-// app/api/separations/pre-separation-summary/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth';
 import { supabaseAdmin } from '@/lib/supabase';
@@ -16,7 +15,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
     }
 
-    // 1. Encontrar a separação ativa do usuário
     const { data: activeSeparation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -28,7 +26,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: [], zones: [] });
     }
 
-    // 2. Buscar todos os itens e suas quantidades para a separação ativa
     const { data: itemsWithQuantities, error: itemsError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select(`
@@ -44,7 +41,6 @@ export async function GET(request: NextRequest) {
 
     if (itemsError) throw new Error(`Erro ao buscar itens: ${itemsError.message}`);
 
-    // 3. Buscar TODAS as lojas cadastradas (UNIVERSAL - sem user_id)
     const { data: lojas, error: lojasError } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('prefixo, zonaSeco, zonaFrio');
@@ -54,7 +50,6 @@ export async function GET(request: NextRequest) {
 
     const lojasMap = new Map(lojas.map(loja => [loja.prefixo, { zonaSeco: loja.zonaSeco, zonaFrio: loja.zonaFrio }]));
 
-    // 4. Processar e agregar os dados
     const summary = new Map<string, { tipoSepar: string, material: string, zones: Map<string, number> }>();
 
     for (const item of itemsWithQuantities) {
@@ -80,7 +75,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 5. Formatar a saída e obter a lista de zonas dinâmicas
     const allZones = new Set<string>();
     const formattedData = Array.from(summary.values()).map(item => {
       let totalGeral = 0;
@@ -100,10 +94,8 @@ export async function GET(request: NextRequest) {
       };
     });
     
-    // Ordenar para garantir consistência
     const sortedZones = Array.from(allZones).sort();
     
-    // Garantir que todas as linhas tenham todas as zonas
     const finalData = formattedData.map(row => {
         const completeRow = { ...row };
         sortedZones.forEach(zone => {

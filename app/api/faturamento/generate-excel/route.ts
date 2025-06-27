@@ -1,4 +1,3 @@
-// app/api/faturamento/generate-excel/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -17,10 +16,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // 1. Gerar dados da tabela de faturamento (reutilizar lógica)
     const items = await getFaturamentoItems(decoded.userId)
 
-    // 2. Buscar médias do sistema para cada material
     const materialCodes = [...new Set(items.map(item => item.material))]
     
     const { data: mediaItems, error: mediaError } = await supabaseAdmin
@@ -34,13 +31,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar médias do sistema' }, { status: 500 })
     }
 
-    // Criar mapa de código para média
     const mediaMap = new Map<string, number>()
     mediaItems?.forEach(item => {
       mediaMap.set(item.codigo, item.media_sistema)
     })
 
-    // 3. Verificar se todas as médias foram encontradas
     const missingMedias = materialCodes.filter(code => !mediaMap.has(code))
     if (missingMedias.length > 0) {
       return NextResponse.json({ 
@@ -48,7 +43,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // 4. Gerar dados para o Excel
     const currentDate = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
     
     const excelData = items.map(item => {
@@ -61,17 +55,15 @@ export async function POST(request: NextRequest) {
         'Grupo Comprador': 'F06',
         'Código fornecedor': 'CD03',
         'Codigo': item.material,
-        'QTD': Math.round(qtdCalculada * 100) / 100, // Arredondar para 2 casas decimais
+        'QTD': Math.round(qtdCalculada * 100) / 100,
         'DP': 'DP01'
       }
     })
 
-    // 5. Criar workbook Excel
     const worksheet = XLSX.utils.json_to_sheet(excelData)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Faturamento')
 
-    // 6. Configurar largura das colunas
     const columnWidths = [
       { wch: 12 }, // Data
       { wch: 10 }, // Centro
@@ -83,13 +75,11 @@ export async function POST(request: NextRequest) {
     ]
     worksheet['!cols'] = columnWidths
 
-    // 7. Gerar buffer do Excel
     const excelBuffer = XLSX.write(workbook, { 
       type: 'buffer', 
       bookType: 'xlsx' 
     })
 
-    // 8. Retornar arquivo Excel
     return new Response(excelBuffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -103,9 +93,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Função auxiliar para buscar itens de faturamento (CORRIGIDA)
 async function getFaturamentoItems(userId: string) {
-  // 1. Buscar separação ativa
   const { data: activeSeparation, error: sepError } = await supabaseAdmin
     .from('colhetron_separations')
     .select('id')
@@ -117,7 +105,6 @@ async function getFaturamentoItems(userId: string) {
     throw new Error('Nenhuma separação ativa encontrada')
   }
 
-  // 2. Buscar itens da separação
   const { data: separationItems, error: itemsError } = await supabaseAdmin
     .from('colhetron_separation_items')
     .select('id, material_code')
@@ -127,7 +114,6 @@ async function getFaturamentoItems(userId: string) {
     throw new Error('Erro ao buscar itens de separação')
   }
 
-  // 3. Buscar quantidades para esses itens
   const itemIds = separationItems.map(item => item.id)
   
   const { data: separationQuantities, error: quantitiesError } = await supabaseAdmin
@@ -140,13 +126,11 @@ async function getFaturamentoItems(userId: string) {
     throw new Error('Erro ao buscar dados de separação')
   }
 
-  // 4. Criar mapa de item_id para material_code
   const itemToMaterialMap = new Map<string, string>()
   separationItems.forEach(item => {
     itemToMaterialMap.set(item.id, item.material_code)
   })
 
-  // 5. Buscar mapeamento de lojas
   const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
   
   const { data: lojas, error: lojasError } = await supabaseAdmin
@@ -166,13 +150,11 @@ async function getFaturamentoItems(userId: string) {
     }
   })
 
-  // 6. Verificar se há lojas sem centro
   const lojasWithoutCenter = uniqueStoreCodes.filter(store => !storeToCenter.has(store))
   if (lojasWithoutCenter.length > 0) {
     throw new Error(`Lojas sem centro definido: ${lojasWithoutCenter.join(', ')}`)
   }
 
-  // 7. Agrupar dados
   const faturamentoMap = new Map<string, any>()
 
   separationQuantities.forEach(sq => {

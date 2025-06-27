@@ -4,7 +4,6 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -23,7 +22,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar separações do usuário
     const { data: separations, error } = await supabaseAdmin
       .from('colhetron_separations')
       .select(`

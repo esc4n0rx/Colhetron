@@ -1,4 +1,3 @@
-// app/api/cadastro/lojas/upload/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -34,10 +33,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar tipo de arquivo
     const allowedTypes = [
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-      'application/vnd.ms-excel' // .xls
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel'
     ]
 
     if (!allowedTypes.includes(file.type)) {
@@ -47,7 +45,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Processar arquivo Excel
     const buffer = new Uint8Array(await file.arrayBuffer())
     const processedLojas = await processLojasExcel(buffer)
 
@@ -58,7 +55,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Inserir lojas em lotes (SEM user_id)
     const batchSize = 100
     const insertedLojas: any[] = []
 
@@ -117,7 +113,6 @@ async function processLojasExcel(buffer: Uint8Array): Promise<any[]> {
   const headers = data[0] as string[]
   const rows = data.slice(1) as any[][]
 
-  // Mapear colunas esperadas
   const columnMap = {
     'PREFIXO': 'prefixo',
     'NOME': 'nome',
@@ -139,7 +134,6 @@ async function processLojasExcel(buffer: Uint8Array): Promise<any[]> {
     }
   })
 
-  // Verificar colunas obrigatórias
   const requiredFields = ['prefixo', 'nome', 'uf']
   const missingFields = requiredFields.filter(field => !headerIndexes[field])
 
@@ -150,11 +144,10 @@ async function processLojasExcel(buffer: Uint8Array): Promise<any[]> {
   const processedLojas: any[] = []
 
   rows.forEach((row, rowIndex) => {
-    if (!row || row.every(cell => !cell)) return // Pular linhas vazias
+    if (!row || row.every(cell => !cell)) return
 
     const loja: any = {}
 
-    // Processar cada campo
     Object.entries(headerIndexes).forEach(([field, colIndex]) => {
       const value = row[colIndex]
       
@@ -165,7 +158,6 @@ async function processLojasExcel(buffer: Uint8Array): Promise<any[]> {
           loja[field] = String(value).trim()
         }
       } else {
-        // Valores padrão para campos opcionais
         if (field === 'ordemSeco' || field === 'ordemFrio') {
           loja[field] = 0
         } else if (['centro', 'zonaSeco', 'subzonaSeco', 'zonaFrio'].includes(field)) {
@@ -174,12 +166,10 @@ async function processLojasExcel(buffer: Uint8Array): Promise<any[]> {
       }
     })
 
-    // Validar campos obrigatórios
     if (loja.prefixo && loja.nome && loja.uf) {
-      // Validar tipo se fornecido
       const validTypes = ['CD', 'Loja Padrão', 'Administrativo']
       if (loja.tipo && !validTypes.includes(loja.tipo)) {
-        loja.tipo = 'Loja Padrão' // Valor padrão
+        loja.tipo = 'Loja Padrão'
       }
 
       processedLojas.push(loja)

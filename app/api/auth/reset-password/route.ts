@@ -1,4 +1,3 @@
-// app/api/auth/reset-password/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { resetPasswordSchema } from '@/lib/auth'
@@ -10,7 +9,6 @@ export async function POST(request: NextRequest) {
     const validatedData = resetPasswordSchema.parse(body)
     const { email, code, password } = validatedData
 
-    // Verificar se o código existe e é válido
     const { data: recoveryData, error: recoveryError } = await supabaseAdmin
       .from('password_recovery_codes')
       .select('*')
@@ -27,10 +25,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Criptografar nova senha
     const hashedPassword = await hashPassword(password)
 
-    // Atualizar senha do usuário
     const { error: updateError } = await supabaseAdmin
       .from('colhetron_user')
       .update({ 
@@ -47,13 +43,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Marcar código como usado
     await supabaseAdmin
       .from('password_recovery_codes')
       .update({ used: true })
       .eq('id', recoveryData.id)
 
-    // Invalidar outros códigos ativos para este usuário
     await supabaseAdmin
       .from('password_recovery_codes')
       .update({ used: true })

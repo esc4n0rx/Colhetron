@@ -1,4 +1,3 @@
-// app/api/ranking/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -16,7 +15,6 @@ interface RankingUser {
 
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
@@ -28,7 +26,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // 1. Buscar todos os usuários
     const { data: users, error: usersError } = await supabaseAdmin
       .from('colhetron_user')
       .select('id, name, email')
@@ -38,7 +35,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar usuários' }, { status: 500 })
     }
 
-    // 2. Buscar separações de todos os usuários
     const { data: separacoes, error: separacoesError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('user_id, status, total_items')
@@ -48,7 +44,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar separações' }, { status: 500 })
     }
 
-    // 3. Calcular estatísticas por usuário
     const userStats = users?.map(user => {
       const userSeparacoes = separacoes?.filter(sep => sep.user_id === user.id) || []
       const separacoesFinalizadas = userSeparacoes.filter(sep => sep.status === 'finalized')
@@ -75,7 +70,7 @@ export async function GET(request: NextRequest) {
       }
     }) || []
 
-    // 4. Ordenar por separações finalizadas (principal) e eficiência (secundário)
+
     const rankedUsers = userStats
       .sort((a, b) => {
         if (b.separacoesFinalizadas !== a.separacoesFinalizadas) {
@@ -88,7 +83,6 @@ export async function GET(request: NextRequest) {
         position: index + 1
       }))
 
-    // 5. Encontrar posição do usuário atual
     const currentUserRanking = rankedUsers.find(user => user.userId === decoded.userId)
 
     return NextResponse.json({

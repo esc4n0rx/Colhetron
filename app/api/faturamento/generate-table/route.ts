@@ -1,4 +1,3 @@
-// app/api/faturamento/generate-table/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -33,7 +32,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // 1. Buscar separação ativa
     const { data: activeSeparation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -47,7 +45,6 @@ export async function GET(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // 2. Buscar itens da separação primeiro
     const { data: separationItems, error: itemsError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select('id, material_code')
@@ -58,7 +55,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar itens de separação' }, { status: 500 })
     }
 
-    // 3. Buscar quantidades para esses itens
     const itemIds = separationItems.map(item => item.id)
     
     const { data: separationQuantities, error: quantitiesError } = await supabaseAdmin
@@ -78,13 +74,11 @@ export async function GET(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // 4. Criar mapa de item_id para material_code
     const itemToMaterialMap = new Map<string, string>()
     separationItems.forEach(item => {
       itemToMaterialMap.set(item.id, item.material_code)
     })
 
-    // 5. Buscar mapeamento de lojas (prefixo -> centro)
     const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
     
     const { data: lojas, error: lojasError } = await supabaseAdmin
@@ -104,7 +98,6 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // 6. Verificar se há lojas sem centro definido
     const lojasWithoutCenter = uniqueStoreCodes.filter(store => !storeToCenter.has(store))
     if (lojasWithoutCenter.length > 0) {
       return NextResponse.json({ 
@@ -112,23 +105,20 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // 7. Agrupar dados por loja e material
     const faturamentoMap = new Map<string, FaturamentoItem>()
 
     separationQuantities.forEach(sq => {
       const materialCode = itemToMaterialMap.get(sq.item_id)
       const centro = storeToCenter.get(sq.store_code)
       
-      if (!materialCode || !centro) return // Pular se não encontrar material ou centro
+      if (!materialCode || !centro) return
 
       const key = `${sq.store_code}-${materialCode}`
       
       if (faturamentoMap.has(key)) {
-        // Somar quantidade se já existe
         const existing = faturamentoMap.get(key)!
         existing.quantidade += sq.quantity
       } else {
-        // Criar novo item
         faturamentoMap.set(key, {
           loja: sq.store_code,
           centro: centro,
@@ -140,7 +130,6 @@ export async function GET(request: NextRequest) {
 
     const items = Array.from(faturamentoMap.values())
       .sort((a, b) => {
-        // Ordenar por loja, depois por material
         if (a.loja !== b.loja) return a.loja.localeCompare(b.loja)
         return a.material.localeCompare(b.material)
       })

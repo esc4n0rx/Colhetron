@@ -1,4 +1,3 @@
-// components/auth/ForgotPasswordForm.tsx
 "use client"
 
 import React, { useState } from 'react'
@@ -72,7 +71,6 @@ export function ForgotPasswordForm({ onSuccess }: ForgotPasswordFormProps) {
       transition={{ duration: 0.3 }}
       className="space-y-6"
     >
-      {/* Information Card */}
       <div className="bg-blue-500/10 border border-blue-400/20 rounded-lg p-4">
         <div className="flex items-start gap-3">
           <Mail className="w-5 h-5 text-blue-400 mt-0.5" />
@@ -89,7 +87,6 @@ export function ForgotPasswordForm({ onSuccess }: ForgotPasswordFormProps) {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {/* Email Field */}
         <div className="space-y-2">
           <Label htmlFor="email" className="text-white text-sm font-medium">
             Email da conta
@@ -123,7 +120,6 @@ export function ForgotPasswordForm({ onSuccess }: ForgotPasswordFormProps) {
           )}
         </div>
 
-        {/* Success Alert */}
         {success && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -138,7 +134,6 @@ export function ForgotPasswordForm({ onSuccess }: ForgotPasswordFormProps) {
           </motion.div>
         )}
 
-        {/* Error Alert */}
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -153,7 +148,6 @@ export function ForgotPasswordForm({ onSuccess }: ForgotPasswordFormProps) {
           </motion.div>
         )}
 
-        {/* Submit Button */}
         <Button
           type="submit"
           disabled={isLoading}
@@ -173,7 +167,6 @@ export function ForgotPasswordForm({ onSuccess }: ForgotPasswordFormProps) {
         </Button>
       </form>
 
-      {/* Security Note */}
       <div className="bg-yellow-500/10 border border-yellow-400/20 rounded-lg p-4">
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5" />

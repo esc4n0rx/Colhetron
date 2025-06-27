@@ -1,8 +1,6 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-
 
 
 export async function GET(request: NextRequest) {
@@ -18,7 +16,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // 1. Encontrar a separação ativa do usuário
     const { data: activeSeparation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -30,7 +27,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: [], lojas: [] })
     }
 
-    // 2. Buscar todos os itens e suas quantidades para a separação ativa
     const { data: itemsWithQuantities, error: itemsError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select(`
@@ -46,7 +42,6 @@ export async function GET(request: NextRequest) {
 
     if (itemsError) throw new Error(`Erro ao buscar itens: ${itemsError.message}`)
 
-    // 3. Buscar todas as lojas cadastradas pelo usuário
     const { data: lojas, error: lojasError } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('prefixo, nome, zonaSeco, subzonaSeco, zonaFrio, ordemSeco, ordemFrio')
@@ -56,11 +51,9 @@ export async function GET(request: NextRequest) {
 
     const lojasMap = new Map(lojas.map(loja => [loja.prefixo, loja]))
 
-    // 4. Processar dados para o formato da tabela
     const separationData = itemsWithQuantities.map(item => {
       const quantities: { [key: string]: number } = {}
       
-      // Adicionar quantidades para todas as lojas
       item.colhetron_separation_quantities.forEach(qty => {
         if (lojasMap.has(qty.store_code)) {
           quantities[qty.store_code] = qty.quantity

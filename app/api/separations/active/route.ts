@@ -5,7 +5,6 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -24,7 +23,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar separação ativa do usuário
     const { data: separation, error } = await supabaseAdmin
       .from('colhetron_separations')
       .select(`
@@ -41,7 +39,7 @@ export async function GET(request: NextRequest) {
       .eq('status', 'active')
       .single()
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+    if (error && error.code !== 'PGRST116') {
       throw error
     }
 

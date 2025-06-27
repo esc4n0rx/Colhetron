@@ -1,4 +1,3 @@
-// app/api/cadastro/lojas/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -37,7 +36,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar TODAS as lojas (universal - sem filtro de usuário)
     const { data: lojas, error } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('*')
@@ -85,7 +83,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = lojaSchema.parse(body)
 
-    // Verificar se já existe loja com mesmo prefixo (universal)
     const { data: existingLoja } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('id')
@@ -99,7 +96,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Criar nova loja (sem user_id)
     const { data: newLoja, error } = await supabaseAdmin
       .from('colhetron_lojas')
       .insert([validatedData])
@@ -163,7 +159,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Verificar se a loja existe (sem verificar usuário)
     const { data: existingLoja, error: checkError } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('id')
@@ -177,7 +172,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Atualizar loja (sem filtro de usuário)
     const { data: updatedLoja, error } = await supabaseAdmin
       .from('colhetron_lojas')
       .update(updateData)

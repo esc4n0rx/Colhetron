@@ -15,8 +15,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
-
-    // Verificar token JWT
     const decoded = verifyToken(token)
     
     if (!decoded) {
@@ -26,7 +24,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Buscar usuário atualizado no banco
     const { data: user, error } = await supabaseAdmin
       .from('colhetron_user')
       .select('id, email, name, role, created_at, updated_at')

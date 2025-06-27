@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -24,7 +23,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar separação ativa
     const { data: separation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -39,7 +37,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar dados dos itens com quantidades por loja
     const { data: items, error: itemsError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select(`
@@ -63,7 +60,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar todas as lojas únicas
     const { data: stores, error: storesError } = await supabaseAdmin
       .from('colhetron_separation_quantities')
       .select('store_code')
@@ -77,19 +73,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Extrair lojas únicas
     const uniqueStores = [...new Set(stores.map(s => s.store_code))].sort()
 
-    // Formatar dados para o frontend
     const formattedData = items.map(item => {
       const quantities: { [key: string]: number } = {}
       
-      // Inicializar todas as lojas com 0
       uniqueStores.forEach(store => {
         quantities[store] = 0
       })
       
-      // Preencher com as quantidades reais
       item.colhetron_separation_quantities.forEach(qty => {
         quantities[qty.store_code] = qty.quantity
       })

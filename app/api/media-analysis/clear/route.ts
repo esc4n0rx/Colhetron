@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
-
-
 export async function DELETE(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')

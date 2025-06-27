@@ -1,4 +1,3 @@
-// app/api/media-analysis/update-custom-media/route.ts (CORRIGIDO)
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -12,7 +11,7 @@ const updateCustomMediaSchema = z.object({
 
 export async function PUT(request: NextRequest) {
   try {
-    // Verificar autenticação
+
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -31,11 +30,11 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Validar dados da requisição
+
     const body = await request.json()
     const { item_id, custom_media } = updateCustomMediaSchema.parse(body)
 
-    // Buscar o item atual
+
     const { data: currentItem, error: fetchError } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .select('id, codigo, material, media_sistema, quantidade_kg, quantidade_caixas, estoque_atual, user_id')
@@ -50,25 +49,24 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Calcular nova média real (permanece baseada no estoque atual)
+
     const novaMediaReal = currentItem.estoque_atual > 0 ? 
       currentItem.quantidade_kg / currentItem.estoque_atual : 0
 
-    // Diferença permanece baseada na quantidade original de caixas vs estoque
+
     const novaDiferencaCaixas = currentItem.quantidade_caixas - currentItem.estoque_atual
 
-    // Recalcular status com a nova média personalizada
     let novoStatus = 'OK'
     
-    // 1. Se quantidade de caixas > estoque atual = CRÍTICO
+
     if (currentItem.quantidade_caixas > currentItem.estoque_atual) {
       novoStatus = 'CRÍTICO'
     }
-    // 2. Se estoque atual = 0 = OK
+
     else if (currentItem.estoque_atual === 0) {
       novoStatus = 'OK'
     }
-    // 3. Se estoque suficiente, verificar se média personalizada é inteira
+
     else {
       const mediaPersonalizadaInteira = Number.isInteger(custom_media)
       
@@ -79,11 +77,10 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Calcular a média original para comparação
     const mediaOriginal = currentItem.quantidade_caixas > 0 ? 
       currentItem.quantidade_kg / currentItem.quantidade_caixas : 0
 
-    // Metadados para indicar que é uma média personalizada
+
     const metadata = {
       is_custom_media: true,
       original_calculated_media: Number(mediaOriginal.toFixed(2)),
@@ -91,15 +88,14 @@ export async function PUT(request: NextRequest) {
       custom_media_set_by: decoded.userId
     }
 
-    // Atualizar item - ALTERANDO APENAS CAMPOS EXISTENTES
     const { data: updatedItem, error: updateError } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .update({
-        media_sistema: custom_media,  // Alterar diretamente a média sistema
+        media_sistema: custom_media,
         media_real: Number(novaMediaReal.toFixed(2)),
         diferenca_caixas: novaDiferencaCaixas,
         status: novoStatus,
-        metadata: metadata,  // Usar campo metadata para rastrear personalização
+        metadata: metadata, 
         updated_at: new Date().toISOString()
       })
       .eq('id', item_id)
@@ -115,7 +111,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Registrar atividade no log
     await logActivity({
       userId: decoded.userId,
       action: 'Média personalizada definida',

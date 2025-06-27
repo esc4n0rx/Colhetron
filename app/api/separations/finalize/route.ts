@@ -1,4 +1,3 @@
-// app/api/separations/finalize/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -6,7 +5,6 @@ import { logActivity } from '@/lib/activity-logger'
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
@@ -18,7 +16,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Buscar separação ativa do usuário
     const { data: activeSeparation, error: fetchError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('*')
@@ -32,7 +29,6 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Finalizar separação
     const { data: finalizedSeparation, error: updateError } = await supabaseAdmin
       .from('colhetron_separations')
       .update({ 
@@ -51,7 +47,6 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // NOVO: Limpar completamente a tabela colhetron_media_analysis para o usuário
     const { error: clearError } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .delete()
@@ -59,7 +54,6 @@ export async function POST(request: NextRequest) {
 
     if (clearError) {
       console.error('Erro ao limpar análise de médias:', clearError)
-      // Log do erro mas não falha a operação principal
       await logActivity({
         userId: decoded.userId,
         action: 'Erro ao limpar análise de médias',
@@ -67,10 +61,14 @@ export async function POST(request: NextRequest) {
         type: 'error'
       })
     } else {
-      console.log('✅ Tabela colhetron_media_analysis limpa com sucesso após finalização')
+      await logActivity({
+        userId: decoded.userId,
+        action: 'Análise de médias limpa',
+        details: `Análise de médias limpa com sucesso após finalização da separação ${activeSeparation.type}.`,
+        type: 'media_analysis'
+      })
     }
 
-    // Registrar atividade
     await logActivity({
       userId: decoded.userId,
       action: 'Separação finalizada',
@@ -100,7 +98,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Função auxiliar para calcular duração
 function calculateDuration(startDate: string): string {
   const start = new Date(startDate)
   const end = new Date()

@@ -1,4 +1,3 @@
-// components/auth/AuthPage.tsx
 "use client"
 
 import React, { useState } from 'react'
@@ -64,7 +63,6 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
-      {/* Background Pattern */}
       <div className="absolute inset-0 opacity-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(120,119,198,0.3),transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(120,119,198,0.3),transparent_50%)]" />
@@ -79,7 +77,6 @@ export default function AuthPage() {
         >
           <Card className="bg-white/10 backdrop-blur-lg border-white/20 shadow-2xl">
             <CardHeader className="text-center space-y-6 pt-8">
-              {/* Logo */}
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
@@ -89,7 +86,6 @@ export default function AuthPage() {
                 <Shield className="w-8 h-8 text-white" />
               </motion.div>
 
-              {/* Title */}
               <div className="space-y-2">
                 <CardTitle className="text-2xl font-bold text-white">
                   {getTitle()}
@@ -99,7 +95,6 @@ export default function AuthPage() {
                 </p>
               </div>
 
-              {/* Back Button */}
               <AnimatePresence>
                 {currentMode !== 'login' && (
                   <motion.div
@@ -149,7 +144,6 @@ export default function AuthPage() {
                 </motion.div>
               </AnimatePresence>
 
-              {/* Mode Switcher */}
               <AnimatePresence>
                 {currentMode === 'login' && (
                   <motion.div
@@ -198,7 +192,6 @@ export default function AuthPage() {
             </CardContent>
           </Card>
 
-          {/* Features */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

@@ -1,4 +1,3 @@
-// app/api/user-activities/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -17,10 +16,10 @@ const querySchema = z.object({
   type: z.string().optional()
 })
 
-// GET - Buscar atividades do usuário
+
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
+
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
@@ -32,7 +31,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Validar query parameters
     const url = new URL(request.url)
     const queryParams = {
       page: url.searchParams.get('page') || '1',
@@ -46,7 +44,6 @@ export async function GET(request: NextRequest) {
     const limitNumber = parseInt(limit)
     const offset = (pageNumber - 1) * limitNumber
 
-    // Construir query
     let query = supabaseAdmin
       .from('colhetron_user_activities')
       .select('*', { count: 'exact' })
@@ -54,7 +51,6 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limitNumber - 1)
 
-    // Filtrar por tipo se especificado
     if (type) {
       query = query.eq('type', type)
     }
@@ -66,7 +62,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar atividades' }, { status: 500 })
     }
 
-    // Formatar atividades para o frontend
     const formattedActivities = activities?.map(activity => ({
       id: activity.id,
       action: activity.action,
@@ -96,10 +91,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Registrar nova atividade
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
@@ -111,11 +104,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Validar dados
     const body = await request.json()
     const validatedData = activitySchema.parse(body)
 
-    // Inserir atividade
     const { data: activity, error } = await supabaseAdmin
       .from('colhetron_user_activities')
       .insert([{
@@ -145,7 +136,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Função para formatar tempo relativo
 function formatTimeAgo(dateString: string): string {
   const now = new Date()
   const date = new Date(dateString)

@@ -1,4 +1,3 @@
-// components/auth/ResetPasswordForm.tsx
 "use client"
 
 import React, { useState, useEffect } from 'react'
@@ -27,7 +26,7 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [timeLeft, setTimeLeft] = useState(15 * 60) // 15 minutos
+  const [timeLeft, setTimeLeft] = useState(15 * 60)
 
   const {
     register,
@@ -42,7 +41,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
 
   const password = watch('password')
 
-  // Timer para expiração do código
   useEffect(() => {
     if (timeLeft > 0) {
       const timer = setTimeout(() => {
@@ -58,7 +56,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
   }
 
-  // Função para calcular força da senha
   const getPasswordStrength = (password: string) => {
     if (!password) return { score: 0, label: '', color: '' }
     
@@ -96,7 +93,7 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
       })
 
       if (response.ok) {
-        setTimeLeft(15 * 60) // Reset timer
+        setTimeLeft(15 * 60) 
         setError('')
       } else {
         setError('Erro ao reenviar código')
@@ -148,7 +145,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
       transition={{ duration: 0.3 }}
       className="space-y-6"
     >
-      {/* Timer e informações */}
       <div className="bg-blue-500/10 border border-blue-400/20 rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -170,10 +166,8 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {/* Hidden Email Field */}
         <input type="hidden" {...register('email')} />
 
-        {/* Code Field */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="code" className="text-white text-sm font-medium">
@@ -203,7 +197,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
             `}
             {...register('code')}
             onChange={(e) => {
-              // Permitir apenas números
               const value = e.target.value.replace(/\D/g, '')
               e.target.value = value
             }}
@@ -220,7 +213,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
          )}
        </div>
 
-       {/* Password Field */}
        <div className="space-y-2">
          <Label htmlFor="password" className="text-white text-sm font-medium">
            Nova senha
@@ -249,7 +241,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
            </Button>
          </div>
 
-         {/* Password Strength Indicator */}
          {password && (
            <motion.div
              initial={{ opacity: 0, height: 0 }}
@@ -286,7 +277,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
          )}
        </div>
 
-       {/* Confirm Password Field */}
        <div className="space-y-2">
          <Label htmlFor="confirmPassword" className="text-white text-sm font-medium">
            Confirmar nova senha
@@ -326,7 +316,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
          )}
        </div>
 
-       {/* Password Requirements */}
        {password && (
          <motion.div
            initial={{ opacity: 0, height: 0 }}
@@ -369,7 +358,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
          </motion.div>
        )}
 
-       {/* Success Alert */}
        {success && (
          <motion.div
            initial={{ opacity: 0, y: -10 }}
@@ -384,7 +372,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
          </motion.div>
        )}
 
-       {/* Error Alert */}
        {error && (
          <motion.div
            initial={{ opacity: 0, y: -10 }}
@@ -399,7 +386,6 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
          </motion.div>
        )}
 
-       {/* Submit Button */}
        <Button
          type="submit"
          disabled={isLoading || timeLeft === 0}
@@ -421,7 +407,7 @@ export function ResetPasswordForm({ email, onSuccess }: ResetPasswordFormProps) 
        </Button>
      </form>
 
-     {/* Security Notice */}
+     {}
      <div className="bg-green-500/10 border border-green-400/20 rounded-lg p-4">
        <div className="flex items-start gap-3">
          <Shield className="w-5 h-5 text-green-400 mt-0.5" />

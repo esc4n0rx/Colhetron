@@ -1,4 +1,3 @@
-// app/api/materials/distinct-categories/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -16,7 +15,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Buscar categorias distintas da coluna diurno (que será nossa categoria principal)
     const { data: categories, error } = await supabaseAdmin
       .from('colhetron_materiais')
       .select('diurno')
@@ -28,7 +26,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar categorias' }, { status: 500 })
     }
 
-    // Extrair valores únicos e filtrar vazios
     const distinctCategories = [...new Set(
       categories
         .map(item => item.diurno)

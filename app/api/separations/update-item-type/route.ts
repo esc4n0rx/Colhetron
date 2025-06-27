@@ -1,5 +1,3 @@
-// app/api/separations/update-item-type/route.ts
-
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -27,7 +25,6 @@ export async function PUT(request: NextRequest) {
     const validatedData = updateSchema.parse(body)
     const { itemId, typeSeparation } = validatedData
 
-    // Verificar se o item pertence à separação ativa do usuário
     const { data: item, error: itemError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select('id, separation_id, colhetron_separations(user_id, status)')
@@ -42,7 +39,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Apenas separações ativas podem ser editadas' }, { status: 403 })
     }
     
-    // Atualizar o tipo de separação
     const { error: updateError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .update({ type_separation: typeSeparation })

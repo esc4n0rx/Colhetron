@@ -50,13 +50,11 @@ export async function GET(request: NextRequest) {
       throw validationError
     }
     
-    // Construir query base - busca TODAS as separações do sistema
     let separationsQuery = supabaseAdmin
       .from('colhetron_separations')
       .select('id, type, date, status, file_name, total_items, total_stores, created_at, updated_at, user_id')
       .order('created_at', { ascending: false })
 
-    // Aplicar filtros apenas se valores válidos forem fornecidos
     if (filters.type && filters.type !== '' && ['SP', 'ES', 'RJ'].includes(filters.type)) {
       separationsQuery = separationsQuery.eq('type', filters.type)
     }
@@ -70,12 +68,10 @@ export async function GET(request: NextRequest) {
       separationsQuery = separationsQuery.lte('date', filters.dateTo)
     }
 
-    // Construir query de contagem com os mesmos filtros - SEM filtro de usuário
     let countQuery = supabaseAdmin
       .from('colhetron_separations')
       .select('*', { count: 'exact', head: true })
 
-    // Aplicar os mesmos filtros na query de contagem
     if (filters.type && filters.type !== '' && ['SP', 'ES', 'RJ'].includes(filters.type)) {
       countQuery = countQuery.eq('type', filters.type)
     }
@@ -96,7 +92,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar dados' }, { status: 500 })
     }
     
-    // Aplicar paginação
     const from = (filters.page - 1) * filters.limit
     const to = from + filters.limit - 1
     const { data: separationsData, error: separationsError } = await separationsQuery.range(from, to)
@@ -106,7 +101,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar separações' }, { status: 500 })
     }
     
-    // Buscar dados de TODOS os usuários que têm separações
     const userIds = [...new Set(separationsData?.map(sep => sep.user_id) || [])]
     
     let usersData: any[] = []
@@ -124,10 +118,8 @@ export async function GET(request: NextRequest) {
       usersData = data || []
     }
     
-    // Criar mapa de usuários para lookup rápido
     const usersMap = new Map(usersData.map(user => [user.id, user]))
     
-    // Formatar dados de resposta com informações do usuário correto
     const separations = separationsData?.map(separation => {
       const user = usersMap.get(separation.user_id)
       return {

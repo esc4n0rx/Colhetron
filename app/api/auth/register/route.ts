@@ -1,4 +1,3 @@
-// app/api/auth/register/route.ts - Correção na URL padrão
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { hashPassword, generateToken } from '@/lib/auth'
@@ -11,7 +10,6 @@ const registerSchema = z.object({
   role: z.string().optional().default('user')
 })
 
-// URL padrão do avatar
 const SUPABASE_STORAGE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const DEFAULT_AVATAR_URL = `${SUPABASE_STORAGE_URL}/storage/v1/object/public/colhetron-assets/avatar/default.png`
 
@@ -21,7 +19,6 @@ export async function POST(request: NextRequest) {
     const validatedData = registerSchema.parse(body)
     const { email, password, name, role } = validatedData
 
-    // Verificar se usuário já existe
     const { data: existingUser } = await supabaseAdmin
       .from('colhetron_user')
       .select('email')
@@ -35,10 +32,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Criptografar senha
     const hashedPassword = await hashPassword(password)
 
-    // Criar usuário
     const { data: user, error } = await supabaseAdmin
       .from('colhetron_user')
       .insert([{
@@ -58,7 +53,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Criar perfil base do usuário
     const defaultProfile = {
       user_id: user.id,
       name: name,
@@ -76,10 +70,8 @@ export async function POST(request: NextRequest) {
 
     if (profileError) {
       console.error('Erro ao criar perfil:', profileError)
-      // Não falha o registro se não conseguir criar o perfil
     }
 
-    // Gerar token JWT
     const token = generateToken(user)
 
     return NextResponse.json({

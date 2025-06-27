@@ -1,4 +1,3 @@
-// app/api/profile/route.ts - Correção nas URLs
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -15,7 +14,6 @@ const profileSchema = z.object({
   avatar_url: z.string().optional()
 })
 
-// URL base do Supabase Storage
 const SUPABASE_STORAGE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const DEFAULT_AVATAR_URL = `${SUPABASE_STORAGE_URL}/storage/v1/object/public/colhetron-assets/avatar/default.png`
 
@@ -32,7 +30,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Buscar perfil do usuário
     const { data: profile, error } = await supabaseAdmin
       .from('colhetron_user_profiles')
       .select('*')
@@ -40,7 +37,6 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (error && error.code === 'PGRST116') {
-      // Perfil não existe, criar um perfil padrão
       const { data: user } = await supabaseAdmin
         .from('colhetron_user')
         .select('name, email')
@@ -101,7 +97,6 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const validatedData = profileSchema.parse(body)
 
-    // Atualizar perfil
     const { data: updatedProfile, error } = await supabaseAdmin
       .from('colhetron_user_profiles')
       .update(validatedData)
@@ -114,7 +109,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao atualizar perfil' }, { status: 500 })
     }
 
-    // Registrar atividade
     await logActivity({
       userId: decoded.userId,
       action: 'Perfil atualizado',

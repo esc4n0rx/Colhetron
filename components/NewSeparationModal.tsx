@@ -1,4 +1,3 @@
-// components/NewSeparationModal.tsx (ATUALIZADO E SIMPLIFICADO)
 "use client"
 
 import React from "react"
@@ -132,7 +131,7 @@ export default function NewSeparationModal({ isOpen, onClose }: NewSeparationMod
             exit={{ scale: 0.9, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="w-full max-w-md"
-            onClick={(e) => e.stopPropagation()} // Impede que o clique no card feche o modal
+            onClick={(e) => e.stopPropagation()}
           >
             <Card className="bg-gray-900 border-gray-700">
               <CardHeader className="flex flex-row items-center justify-between">

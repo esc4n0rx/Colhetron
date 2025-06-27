@@ -1,16 +1,14 @@
-// app/api/git/releases/route.ts
+
 import { NextRequest, NextResponse } from 'next/server'
 
-// Configurar essas variáveis no seu .env.local
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN
-const GITHUB_OWNER = process.env.GITHUB_OWNER || 'seu-usuario'
-const GITHUB_REPO = process.env.GITHUB_REPO || 'seu-repositorio'
+const GITHUB_OWNER = process.env.GITHUB_OWNER || 'esc4n0rx'
+const GITHUB_REPO = process.env.GITHUB_REPO || 'Colhetron'
 
 export async function GET(request: NextRequest) {
   try {
-    // Se não tiver token configurado, retornar dados mock
     if (!GITHUB_TOKEN) {
-      console.warn('GITHUB_TOKEN não configurado, usando dados mock')
+      console.warn('GITHUB_TOKEN não configurado')
       return NextResponse.json({
         releases: getMockReleases(),
         source: 'mock'
@@ -25,7 +23,7 @@ export async function GET(request: NextRequest) {
           'Accept': 'application/vnd.github.v3+json',
           'User-Agent': 'Colhetron-App'
         },
-        next: { revalidate: 300 } // Cache por 5 minutos
+        next: { revalidate: 300 }
       }
     )
 
@@ -35,10 +33,9 @@ export async function GET(request: NextRequest) {
 
     const releases = await response.json()
     
-    // Filtrar apenas releases públicos e não-draft
     const filteredReleases = releases
       .filter((release: any) => !release.draft)
-      .slice(0, 10) // Últimos 10 releases
+      .slice(0, 10)
 
     return NextResponse.json({
       releases: filteredReleases,
@@ -48,7 +45,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Erro ao buscar releases:', error)
     
-    // Em caso de erro, retornar dados mock
     return NextResponse.json({
       releases: getMockReleases(),
       source: 'mock',

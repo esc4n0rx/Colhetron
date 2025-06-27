@@ -1,4 +1,4 @@
-// components/auth/LoginForm.tsx
+
 "use client"
 
 import React, { useState } from 'react'
@@ -61,7 +61,6 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
-      {/* Email Field */}
       <div className="space-y-2">
         <Label htmlFor="email" className="text-white text-sm font-medium">
           Email
@@ -95,7 +94,6 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
         )}
       </div>
 
-      {/* Password Field */}
       <div className="space-y-2">
         <Label htmlFor="password" className="text-white text-sm font-medium">
           Senha
@@ -135,7 +133,6 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
         )}
       </div>
 
-      {/* Forgot Password Link */}
       <div className="flex justify-end">
         <Button
           type="button"
@@ -148,7 +145,6 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
         </Button>
       </div>
 
-      {/* Error Alert */}
       {error && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -163,7 +159,6 @@ export function LoginForm({ onForgotPassword }: LoginFormProps) {
         </motion.div>
       )}
 
-      {/* Submit Button */}
       <Button
         type="submit"
         disabled={isLoading}

@@ -1,4 +1,3 @@
-// app/api/cadastro/lojas/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -38,7 +37,6 @@ export async function PUT(
     const updates = await request.json()
     const validatedData = updateLojaSchema.parse(updates)
 
-    // Verificar se a loja existe (sem verificar usuário)
     const { data: existingLoja, error: checkError } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('*')
@@ -49,7 +47,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 })
     }
 
-    // Verificar se há conflito de prefixo (se o prefixo está sendo alterado)
     if (validatedData.prefixo && validatedData.prefixo !== existingLoja.prefixo) {
       const { data: conflictLoja } = await supabaseAdmin
         .from('colhetron_lojas')
@@ -65,7 +62,6 @@ export async function PUT(
       }
     }
 
-    // Atualizar loja (sem filtro de usuário)
     const { data: updatedLoja, error: updateError } = await supabaseAdmin
       .from('colhetron_lojas')
       .update(validatedData)
@@ -119,14 +115,12 @@ export async function DELETE(
 
     const { id } = params
 
-    // Buscar loja para log antes de deletar
     const { data: existingLoja } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('prefixo, nome')
       .eq('id', id)
       .single()
 
-    // Deletar loja (sem filtro de usuário)
     const { error: deleteError } = await supabaseAdmin
       .from('colhetron_lojas')
       .delete()

@@ -1,4 +1,3 @@
-// app/api/separations/delete/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -6,7 +5,6 @@ import { logActivity } from '@/lib/activity-logger'
 
 export async function DELETE(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -34,7 +32,6 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Verificar se a separação pertence ao usuário
     const { data: separation, error: checkError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id, user_id, file_name, type, status')
@@ -49,7 +46,6 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Deletar separação (cascade vai deletar itens e quantidades automaticamente)
     const { error: deleteError } = await supabaseAdmin
       .from('colhetron_separations')
       .delete()
@@ -64,7 +60,6 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // NOVO: Limpar completamente a tabela colhetron_media_analysis para o usuário
     const { error: clearError } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .delete()
@@ -72,7 +67,6 @@ export async function DELETE(request: NextRequest) {
 
     if (clearError) {
       console.error('Erro ao limpar análise de médias:', clearError)
-      // Log do erro mas não falha a operação principal
       await logActivity({
         userId: decoded.userId,
         action: 'Erro ao limpar análise de médias',
@@ -80,10 +74,15 @@ export async function DELETE(request: NextRequest) {
         type: 'error'
       })
     } else {
-      console.log('✅ Tabela colhetron_media_analysis limpa com sucesso após exclusão')
+      await logActivity({
+        userId: decoded.userId,
+        action: 'Análise de médias limpa',
+        details: `Análise de médias limpa com sucesso após exclusão da separação ${separation.type}.`,
+        type: 'media_analysis'
+      })
+      console.log('Tabela colhetron_media_analysis limpa com sucesso após exclusão')
     }
 
-    // Registrar atividade
     await logActivity({
       userId: decoded.userId,
       action: 'Separação deletada',

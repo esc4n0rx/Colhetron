@@ -1,4 +1,3 @@
-// app/api/faturamento/check-media-status/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -16,7 +15,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Buscar todos os itens da análise de médias
     const { data: mediaItems, error } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .select('id, codigo, material, status')
@@ -33,7 +31,6 @@ export async function GET(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Filtrar itens que não estão com status OK
     const errorItems = mediaItems.filter(item => item.status !== 'OK')
 
     const result = {

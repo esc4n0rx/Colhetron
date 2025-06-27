@@ -145,7 +145,6 @@ export default function LoginPage() {
                   {isRegisterMode ? "Crie sua conta para acessar" : "Faça login para acessar o sistema"}
                 </p>
 
-                {/* Switch Login/Registro */}
                 <div className="flex items-center justify-center space-x-3 bg-gray-800/30 rounded-lg p-3">
                   <User className={`w-4 h-4 ${!isRegisterMode ? 'text-blue-400' : 'text-gray-500'}`} />
                   <span className={`text-sm ${!isRegisterMode ? 'text-white' : 'text-gray-400'}`}>
@@ -174,7 +173,6 @@ export default function LoginPage() {
                       transition={{ duration: 0.3 }}
                       className="space-y-4"
                     >
-                      {/* Campo Nome (apenas no registro) */}
                       {isRegisterMode && (
                         <div className="space-y-2">
                           <Label htmlFor="name" className="text-gray-300">Nome Completo</Label>
@@ -194,7 +192,6 @@ export default function LoginPage() {
                         </div>
                       )}
 
-                      {/* Campo Email */}
                       <div className="space-y-2">
                         <Label htmlFor="email" className="text-gray-300">Email</Label>
                         <div className="relative">
@@ -212,7 +209,6 @@ export default function LoginPage() {
                         </div>
                       </div>
 
-                      {/* Campo Senha */}
                       <div className="space-y-2">
                         <Label htmlFor="password" className="text-gray-300">Senha</Label>
                         <div className="relative">
@@ -238,7 +234,6 @@ export default function LoginPage() {
                         </div>
                       </div>
 
-                      {/* Confirmar Senha (apenas no registro) */}
                       {isRegisterMode && (
                         <div className="space-y-2">
                           <Label htmlFor="confirmPassword" className="text-gray-300">Confirmar Senha</Label>
@@ -268,7 +263,6 @@ export default function LoginPage() {
                     </motion.div>
                   </AnimatePresence>
 
-                  {/* Mensagens de Erro e Sucesso */}
                   <AnimatePresence>
                     {error && (
                       <motion.div
@@ -295,7 +289,6 @@ export default function LoginPage() {
                     )}
                   </AnimatePresence>
 
-                  {/* Botão Submit */}
                   <Button
                     type="submit"
                     disabled={isLoading}
@@ -314,13 +307,6 @@ export default function LoginPage() {
                     )}
                   </Button>
                 </form>
-
-                {/* Credenciais de Demo */}
-                {!isRegisterMode && (
-                  <div className="mt-6 text-center">
-                    <p className="text-sm text-gray-400">Demo: admin@colhetron.com / admin123</p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>

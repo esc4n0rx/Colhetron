@@ -1,4 +1,3 @@
-// app/api/media-analysis/force-status/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -12,7 +11,7 @@ const forceStatusSchema = z.object({
 
 export async function PUT(request: NextRequest) {
   try {
-    // Verificar autenticação
+
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -31,11 +30,10 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Validar dados da requisição
+
     const body = await request.json()
     const { item_id, reason } = forceStatusSchema.parse(body)
 
-    // Buscar o item atual
     const { data: currentItem, error: fetchError } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .select('id, codigo, material, status, user_id')
@@ -50,7 +48,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Verificar se o item já está OK
     if (currentItem.status === 'OK') {
       return NextResponse.json(
         { error: 'Item já possui status OK' },
@@ -58,7 +55,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Atualizar status para OK
     const { data: updatedItem, error: updateError } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .update({
@@ -82,7 +78,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Registrar atividade no log
     await logActivity({
       userId: decoded.userId,
       action: `Status forçado para OK`,

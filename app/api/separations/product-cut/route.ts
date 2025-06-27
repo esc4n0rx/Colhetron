@@ -32,7 +32,6 @@ interface CutOperation {
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
@@ -44,11 +43,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Validar dados da requisição
     const body = await request.json()
     const validatedData = cutRequestSchema.parse(body)
 
-    // Buscar separação ativa
+
     const { data: activeSeparation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id, type, date, file_name')
@@ -62,7 +60,6 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Buscar item da separação
     const { data: separationItem, error: itemError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select('id, description, row_number, type_separation')
@@ -76,7 +73,6 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Buscar quantidades atuais
     const { data: currentQuantities, error: quantitiesError } = await supabaseAdmin
       .from('colhetron_separation_quantities')
       .select('store_code, quantity')
@@ -99,9 +95,7 @@ export async function POST(request: NextRequest) {
     const updatesToExecute: Array<{ store_code: string, new_quantity: number }> = []
     const cutOperations: CutOperation[] = []
 
-    // Processar corte baseado no tipo
     if (validatedData.cut_type === 'all') {
-      // Cortar tudo - zerar todas as quantidades
       currentQuantities.forEach(q => {
         updatesToExecute.push({
           store_code: q.store_code,
@@ -121,7 +115,6 @@ export async function POST(request: NextRequest) {
       })
 
     } else if (validatedData.cut_type === 'specific') {
-      // Cortar lojas específicas
       if (!validatedData.stores || validatedData.stores.length === 0) {
         return NextResponse.json({ 
           error: 'Nenhuma loja especificada para corte específico' 
@@ -151,7 +144,7 @@ export async function POST(request: NextRequest) {
       })
 
     } else if (validatedData.cut_type === 'partial') {
-      // Corte parcial
+
       if (!validatedData.partial_cuts || validatedData.partial_cuts.length === 0) {
         return NextResponse.json({ 
           error: 'Nenhuma quantidade especificada para corte parcial' 
@@ -165,7 +158,6 @@ export async function POST(request: NextRequest) {
       currentQuantities.forEach(q => {
         const partialCut = partialCutsMap.get(q.store_code)
         if (partialCut) {
-          // Validar se a quantidade a cortar é válida
           if (partialCut.quantity_to_cut > q.quantity) {
             throw new Error(`Quantidade a cortar (${partialCut.quantity_to_cut}) é maior que a disponível (${q.quantity}) na loja ${q.store_code}`)
           }
@@ -196,17 +188,14 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Executar atualizações no banco
     const updatePromises = updatesToExecute.map(update => {
       if (update.new_quantity === 0) {
-        // Remover registro se quantidade for 0
         return supabaseAdmin
           .from('colhetron_separation_quantities')
           .delete()
           .eq('item_id', separationItem.id)
           .eq('store_code', update.store_code)
       } else {
-        // Atualizar quantidade
         return supabaseAdmin
           .from('colhetron_separation_quantities')
           .update({ quantity: update.new_quantity })
@@ -217,7 +206,6 @@ export async function POST(request: NextRequest) {
 
     const results = await Promise.allSettled(updatePromises)
     
-    // Verificar se houve erros
     const errors = results
       .filter(result => result.status === 'rejected')
       .map(result => (result as PromiseRejectedResult).reason)
@@ -229,7 +217,6 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Registrar atividade com metadata detalhado
     await logActivity({
       userId: decoded.userId,
       action: 'Corte de produto realizado',

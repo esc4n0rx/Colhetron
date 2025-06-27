@@ -9,14 +9,12 @@ export async function POST(request: NextRequest) {
     const validatedData = forgotPasswordSchema.parse(body)
     const { email } = validatedData
 
-    // Verificar se o usuário existe
     const { data: user, error: userError } = await supabaseAdmin
       .from('colhetron_user')
       .select('id, email, name')
       .eq('email', email)
       .single()
 
-    // Por segurança, sempre retornamos sucesso mesmo se o email não existir
     if (userError || !user) {
       return NextResponse.json({
         success: true,
@@ -24,11 +22,9 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Gerar código de recuperação
     const recoveryCode = generateRecoveryCode()
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutos
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000)
 
-    // Salvar código na base de dados
     const { error: insertError } = await supabaseAdmin
       .from('password_recovery_codes')
       .insert([
@@ -49,7 +45,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Enviar email com código
     const emailResult = await sendRecoveryEmail({
       email: user.email,
       code: recoveryCode,

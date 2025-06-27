@@ -1,10 +1,8 @@
-// app/api/system/stats/route.ts
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET() {
   try {
-    // Buscar estatísticas reais do banco de dados
     const [separationsResult, itemsResult, usersResult] = await Promise.allSettled([
       supabaseAdmin
         .from('colhetron_separations')
@@ -32,7 +30,6 @@ export async function GET() {
   } catch (error) {
     console.error('Erro ao buscar estatísticas:', error)
     
-    // Retornar dados padrão em caso de erro
     return NextResponse.json({
       totalSeparations: 0,
       totalItems: 0,

@@ -1,4 +1,3 @@
-// app/dashboard/page.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -19,7 +18,7 @@ import ConfiguracoesPage from "@/components/pages/ConfiguracoesPage"
 import SobrePage from "@/components/pages/SobrePage"
 import AtualizacoesPage from "@/components/pages/AtualizacoesPage"
 import PerfilPage from "@/components/pages/PerfilPage"
-import RelatoriosPage from "@/components/pages/RelatoriosPage" // NOVA IMPORTAÇÃO
+import RelatoriosPage from "@/components/pages/RelatoriosPage"
 import { Settings, Info, Download } from 'lucide-react'
 
 const tabs = [
@@ -40,7 +39,6 @@ export default function DashboardPage() {
   const [currentPage, setCurrentPage] = useState("dashboard")
   const [isNewSeparationModalOpen, setIsNewSeparationModalOpen] = useState(false)
 
-  // Menu items para o Header
   const menuItems = [
     { id: "configuracoes", label: "Configurações", icon: Settings },
     { id: "sobre", label: "Sobre", icon: Info },
@@ -101,7 +99,7 @@ export default function DashboardPage() {
         return <AtualizacoesPage onBack={() => setCurrentPage("dashboard")} />
       case "perfil":
         return <PerfilPage onBack={() => setCurrentPage("dashboard")} />
-      case "relatorios": // NOVA PÁGINA
+      case "relatorios":
         return <RelatoriosPage onBack={() => setCurrentPage("dashboard")} />
       default:
         return (
@@ -125,7 +123,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-950">
-      {/* Loading overlay para separação */}
       {separationLoading && (
         <div className="fixed inset-0 bg-gray-950 flex items-center justify-center z-50">
           <motion.div
@@ -137,7 +134,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Conteúdo principal */}
       <div className={separationLoading ? "opacity-0 pointer-events-none" : "opacity-100"}>
         <Header 
           currentSeparation={currentSeparation}

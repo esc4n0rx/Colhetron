@@ -1,4 +1,3 @@
-// components/Header.tsx
 "use client"
 
 import { useState } from 'react'
@@ -19,7 +18,7 @@ import {
  PlusCircle, 
  CheckCircle, 
  Loader2,
- FileText // Novo ícone para relatórios
+ FileText
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
@@ -108,7 +107,6 @@ export default function Header({
    <header className="bg-gray-900/95 border-b border-gray-800 backdrop-blur-sm sticky top-0 z-50">
      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
        <div className="flex items-center justify-between h-16">
-         {/* Logo e informações da separação */}
          <motion.div 
            className="flex items-center space-x-3"
            initial={{ opacity: 0, x: -20 }}
@@ -133,9 +131,7 @@ export default function Header({
            </div>
          </motion.div>
 
-         {/* Menu Desktop */}
          <div className="hidden md:flex items-center space-x-2">
-           {/* Botão dinâmico: Nova Separação ou Finalizar Separação */}
            {currentSeparation ? (
              <Button
                onClick={handleFinalizeSeparation}
@@ -168,7 +164,6 @@ export default function Header({
              </Button>
            )}
 
-           {/* NOVO BOTÃO DE RELATÓRIOS */}
            <Button
              onClick={() => onNavigate("relatorios")}
              size="sm"
@@ -180,7 +175,6 @@ export default function Header({
              Relatórios
            </Button>
 
-           {/* Menu items */}
            {menuItems.map((item) => (
              <Button
                key={item.id}
@@ -194,7 +188,6 @@ export default function Header({
              </Button>
            ))}
 
-           {/* Menu do usuário */}
            <DropdownMenu>
              <DropdownMenuTrigger asChild>
                <Button variant="ghost" size="sm" className="text-gray-300 hover:text-white">
@@ -216,7 +209,6 @@ export default function Header({
            </DropdownMenu>
          </div>
 
-         {/* Menu Mobile */}
          <div className="md:hidden">
            <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
              <DropdownMenuTrigger asChild>
@@ -225,7 +217,6 @@ export default function Header({
                </Button>
              </DropdownMenuTrigger>
              <DropdownMenuContent align="end" className="bg-gray-800 border-gray-700 w-56">
-               {/* Botão dinâmico mobile */}
                {currentSeparation ? (
                  <DropdownMenuItem
                    onClick={() => {
@@ -262,7 +253,6 @@ export default function Header({
                
                <DropdownMenuSeparator className="bg-gray-700" />
                
-               {/* NOVO ITEM RELATÓRIOS NO MOBILE */}
                <DropdownMenuItem
                  onClick={() => {
                    onNavigate("relatorios");
@@ -274,7 +264,6 @@ export default function Header({
                  Relatórios
                </DropdownMenuItem>
                
-               {/* Menu items mobile */}
                {menuItems.map((item) => (
                  <DropdownMenuItem
                    key={item.id}
@@ -291,7 +280,6 @@ export default function Header({
                
                <DropdownMenuSeparator className="bg-gray-700" />
                
-               {/* Perfil e logout mobile */}
                <DropdownMenuItem 
                  onClick={() => {
                    onNavigate("perfil"); 

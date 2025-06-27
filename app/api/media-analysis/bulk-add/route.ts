@@ -1,5 +1,3 @@
-// app/api/media-analysis/bulk-add/route.ts
-
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -29,7 +27,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // OBRIGATÓRIO: Verificar se há separação ativa
     const { data: activeSeparation } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -48,7 +45,6 @@ export async function POST(request: NextRequest) {
 
     const validatedData = bulkAddSchema.parse(body)
 
-    // Para itens existentes: remover e recalcular
     const codigos = validatedData.items.map(item => item.codigo)
     const { error: deleteError } = await supabaseAdmin
       .from('colhetron_media_analysis')
@@ -60,32 +56,25 @@ export async function POST(request: NextRequest) {
       console.error('Erro ao remover itens existentes:', deleteError)
     }
 
-    // Processar cada item com a lógica corrigida
     const itemsToInsert = await Promise.all(
       validatedData.items.map(async (item) => {
-        // Calcular estoque atual baseado na separação ativa
+
         const estoqueAtual = await calculateEstoqueAtual(decoded.userId, item.codigo, activeSeparation.id)
         
-        // CORRIGIR: Diferença = Qtd Caixas - Estoque Atual (não o contrário)
         const diferencaCaixas = item.quantidade_caixas - estoqueAtual
         
-        // CORRIGIR: Média Real = Qtd KG / Estoque Atual (se estoque > 0)
         const mediaReal = estoqueAtual > 0 ? item.quantidade_kg / estoqueAtual : 0
         
-        // NOVA LÓGICA DE STATUS conforme especificação
         let status = 'OK'
         
-        // 1. Se saldo de Qtd Caixa > estoque atual = CRÍTICO (faltando)
         if (estoqueAtual> item.quantidade_caixas ) {
           status = 'CRÍTICO'
         }
-        // 2. Se saldo atual = 0 = OK (não tem distribuição)
+
         else if (estoqueAtual === 0) {
           status = 'OK'
         }
-        // 3. Se estoque suficiente, verificar se média sistema é inteira
         else {
-          // Verificar se média sistema é número inteiro
           const mediaSistemaInteira = Number.isInteger(item.media_sistema)
           
           if (!mediaSistemaInteira) {
@@ -100,7 +89,7 @@ export async function POST(request: NextRequest) {
           material: item.material,
           quantidade_kg: item.quantidade_kg,
           quantidade_caixas: item.quantidade_caixas,
-          media_sistema: item.media_sistema, // Manter valor original sem arredondamento forçado
+          media_sistema: item.media_sistema,
           estoque_atual: estoqueAtual,
           diferenca_caixas: diferencaCaixas,
           media_real: Number(mediaReal.toFixed(2)),
@@ -113,7 +102,6 @@ export async function POST(request: NextRequest) {
       })
     )
 
-    // Inserir itens na tabela colhetron_media_analysis
     const { data: insertedItems, error } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .insert(itemsToInsert)
@@ -150,10 +138,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Função para calcular estoque atual baseado na separação ativa
 async function calculateEstoqueAtual(userId: string, codigo: string, separationId: string): Promise<number> {
   try {
-    // Buscar o item na separação pelo material_code
     const { data: separationItems } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select('id')
@@ -161,10 +147,9 @@ async function calculateEstoqueAtual(userId: string, codigo: string, separationI
       .eq('material_code', codigo)
 
     if (!separationItems || separationItems.length === 0) {
-      return 0 // Material não existe na separação
+      return 0 
     }
 
-    // Somar todas as quantidades do material na separação
     let totalQuantity = 0
     for (const item of separationItems) {
       const { data: quantities } = await supabaseAdmin

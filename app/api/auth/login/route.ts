@@ -8,11 +8,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    // Validar dados de entrada
     const validatedData = loginSchema.parse(body)
     const { email, password } = validatedData
 
-    // Buscar usuário no banco
     const { data: user, error } = await supabaseAdmin
       .from('colhetron_user')
       .select('*')
@@ -26,7 +24,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar senha
     const isValidPassword = await verifyPassword(password, user.password)
     
     if (!isValidPassword) {
@@ -36,7 +33,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Gerar token JWT
     const token = generateToken({
       id: user.id,
       email: user.email,
@@ -46,13 +42,12 @@ export async function POST(request: NextRequest) {
       updated_at: user.updated_at
     })
 
-    // Atualizar último login
+
     await supabaseAdmin
       .from('colhetron_user')
       .update({ last_login: new Date().toISOString() })
       .eq('id', user.id)
 
-    // Retornar dados do usuário (sem senha) e token
     const { password: _, ...userWithoutPassword } = user
 
     await logActivity({

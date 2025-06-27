@@ -1,4 +1,3 @@
-// app/api/separations/product-search/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -11,7 +10,6 @@ const searchSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
@@ -23,14 +21,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Validar parâmetros
     const url = new URL(request.url)
     const query = url.searchParams.get('query')
     const type = url.searchParams.get('type')
 
     const validatedParams = searchSchema.parse({ query, type })
 
-    // Buscar separação ativa
     const { data: activeSeparation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -44,7 +40,6 @@ export async function GET(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Buscar produtos baseado no tipo de pesquisa
     let itemsQuery = supabaseAdmin
       .from('colhetron_separation_items')
       .select(`
@@ -71,7 +66,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar produtos' }, { status: 500 })
     }
 
-    // Processar resultados
     const products = items?.map(item => {
       const quantities = item.colhetron_separation_quantities || []
       const totalDistributed = quantities.reduce((sum, q) => sum + q.quantity, 0)
@@ -89,7 +83,6 @@ export async function GET(request: NextRequest) {
       }
     }) || []
 
-    // Filtrar apenas produtos com quantidade > 0
     const productsWithQuantity = products.filter(p => p.total_distributed > 0)
 
     return NextResponse.json({

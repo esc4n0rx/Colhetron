@@ -150,7 +150,6 @@ async function processExcelFile(buffer: Uint8Array): Promise<ProcessedData> {
   const stores: string[] = []
   const quantities: ProcessedData['quantities'] = []
 
-  // Encontrar última linha com dados na coluna A (material)
   let lastMaterialRow = 0
   for (let row = 1; row <= range.e.r; row++) {
     const materialCodeCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
@@ -163,8 +162,7 @@ async function processExcelFile(buffer: Uint8Array): Promise<ProcessedData> {
     throw new Error('Nenhum material encontrado na coluna A')
   }
 
-  // Encontrar última coluna com dados na linha 1 (lojas) - começa na coluna C (índice 2)
-  let lastStoreCol = 1 // Começar em B para garantir que tem pelo menos coluna C
+  let lastStoreCol = 1 
   for (let col = 2; col <= range.e.c; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
     const cell = worksheet[cellAddress]
@@ -178,11 +176,8 @@ async function processExcelFile(buffer: Uint8Array): Promise<ProcessedData> {
     throw new Error('Nenhuma loja encontrada na linha 1 a partir da coluna C')
   }
 
-  // Processar dados dos materiais (de 2 até a última linha encontrada)
   for (let row = 1; row <= lastMaterialRow; row++) {
-    // Coluna A - Material Code
     const materialCodeCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
-    // Coluna B - Description
     const descriptionCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 1 })]
 
     if (materialCodeCell && materialCodeCell.v && descriptionCell && descriptionCell.v) {
@@ -194,10 +189,9 @@ async function processExcelFile(buffer: Uint8Array): Promise<ProcessedData> {
         materials.push({
           code: materialCode,
           description: description,
-          rowNumber: row + 1 // +1 para linha real do Excel
+          rowNumber: row + 1 
         })
 
-        // Extrair quantidades para cada loja
         for (let col = 2; col <= lastStoreCol; col++) {
           const quantityCell = worksheet[XLSX.utils.encode_cell({ r: row, c: col })]
           const storeIndex = col - 2
@@ -239,8 +233,6 @@ async function createSeparation(params: {
   const { userId, type, date, fileName, processedData } = params
 
   try {
-    // Buscar cadastro de materiais pelo código (sem filtro de user_id)
-    // para pegar a categoria correta da coluna diurno
     const materialCodes = processedData.materials.map(m => m.code)
     const { data: globalMaterials, error: materialsError } = await supabaseAdmin
       .from('colhetron_materiais')
@@ -256,7 +248,6 @@ async function createSeparation(params: {
       materialTypeMap.set(m.material, m.diurno || 'SECO')
     })
 
-    // Criar separação principal
     const { data: separation, error: separationError } = await supabaseAdmin
       .from('colhetron_separations')
       .insert([
@@ -277,7 +268,6 @@ async function createSeparation(params: {
       throw new Error(`Erro ao criar separação: ${separationError.message}`)
     }
 
-    // Inserir materiais em lotes com a categoria correta
     const batchSize = 100
     const materialBatches = []
     
@@ -306,7 +296,6 @@ async function createSeparation(params: {
       insertedItems.push(...items)
     }
 
-    // Inserir quantidades em lotes
     const quantityBatches = []
     for (let i = 0; i < processedData.quantities.length; i += batchSize) {
       const batch = processedData.quantities.slice(i, i + batchSize).map(qty => ({

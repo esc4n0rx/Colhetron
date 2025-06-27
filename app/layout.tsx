@@ -12,8 +12,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Sistema de Separação de Pedidos Colhetron",
-  description: "Sistema moderno para gerenciamento de separação de pedidos",
-    generator: 'Paulo Oliveira'
+  description: "Sistema moderno para gerenciamento de separação de pedidos"
 }
 
 export default function RootLayout({

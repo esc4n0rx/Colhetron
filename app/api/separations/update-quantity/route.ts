@@ -1,5 +1,3 @@
-// Caminho: sua-api/route.ts
-
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -34,7 +32,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // AJUSTE 1: Adicione 'codigo' ao select para obtê-lo para o log.
     const { data: item, error: itemError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select(`

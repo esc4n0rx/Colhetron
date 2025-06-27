@@ -1,4 +1,3 @@
-// app/api/cadastro/materiais/upload/route.ts (CORRIGIDO)
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -11,7 +10,7 @@ interface ExcelMaterialRow {
   categoria?: string
   diurno?: string
   noturno?: string
-  [key: string]: any // Para capturar outras colunas
+  [key: string]: any
 }
 
 export async function POST(request: NextRequest) {
@@ -34,7 +33,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Arquivo não fornecido' }, { status: 400 })
     }
 
-    // Verificar extensão do arquivo
     const fileName = file.name.toLowerCase()
     if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
       return NextResponse.json({ 
@@ -42,7 +40,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Ler arquivo Excel
     const buffer = await file.arrayBuffer()
     const workbook = XLSX.read(buffer, { type: 'array' })
     const sheetName = workbook.SheetNames[0]
@@ -58,14 +55,9 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Processar cabeçalhos de forma flexível
     const headers = jsonData[0] as string[]
     const dataRows = jsonData.slice(1)
-    
-    console.log('Headers encontrados:', headers)
-    console.log('Número de linhas de dados:', dataRows.length)
 
-    // Mapeamento flexível de colunas
     const findColumnIndex = (possibleNames: string[]): number => {
       for (const name of possibleNames) {
         const index = headers.findIndex(header => 
@@ -92,15 +84,6 @@ export async function POST(request: NextRequest) {
       'noturno', 'night', 'turno_noite', 'categoria_noturno'
     ])
 
-    console.log('Índices encontrados:', {
-      material: materialIndex,
-      descricao: descricaoIndex,
-      categoria: categoriaIndex,
-      diurno: diurnoIndex,
-      noturno: noturnoIndex
-    })
-
-    // Verificar colunas obrigatórias
     if (materialIndex === -1) {
       return NextResponse.json({ 
         error: `Coluna "material" não encontrada. Headers disponíveis: ${headers.join(', ')}` 
@@ -113,23 +96,19 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Processar dados linha por linha
     const processedMaterials = []
     const errors = []
 
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i] as any[]
-      const rowNumber = i + 2 // +2 porque Excel começa em 1 e temos header
+      const rowNumber = i + 2
 
       try {
-        // Extrair valores das colunas
         const material = row[materialIndex]?.toString()?.trim()
         const descricao = row[descricaoIndex]?.toString()?.trim()
 
-        // Pular linhas vazias
         if (!material && !descricao) continue
 
-        // Validações básicas
         if (!material) {
           errors.push(`Linha ${rowNumber}: Material é obrigatório`)
           continue
@@ -140,10 +119,8 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Determinar categoria (lógica atualizada para ser mais flexível)
-        let categoria = 'SECO' // Valor padrão
+        let categoria = 'SECO'
 
-        // Prioridade: categoria > diurno > noturno > padrão
         if (categoriaIndex !== -1 && row[categoriaIndex]) {
           categoria = row[categoriaIndex].toString().trim().toUpperCase()
         } else if (diurnoIndex !== -1 && row[diurnoIndex]) {
@@ -152,7 +129,6 @@ export async function POST(request: NextRequest) {
           categoria = row[noturnoIndex].toString().trim().toUpperCase()
         }
 
-        // Garantir que temos uma categoria válida
         if (!categoria || categoria === '') {
           categoria = 'SECO'
         }
@@ -171,10 +147,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`Materiais processados: ${processedMaterials.length}`)
-    console.log(`Erros encontrados: ${errors.length}`)
-
-    // Verificar se há dados para processar
     if (processedMaterials.length === 0) {
       return NextResponse.json({ 
         error: 'Nenhum material válido encontrado no arquivo',
@@ -182,7 +154,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Se houver muitos erros em relação aos dados válidos, alertar
     if (errors.length > processedMaterials.length) {
       return NextResponse.json({ 
         error: `Muitos erros encontrados (${errors.length} erros vs ${processedMaterials.length} materiais válidos)`, 
@@ -190,7 +161,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Verificar duplicatas no banco de dados
     const materialCodes = processedMaterials.map(m => m.material)
     const { data: existingMaterials } = await supabaseAdmin
       .from('colhetron_materiais')
@@ -198,26 +168,19 @@ export async function POST(request: NextRequest) {
       .in('material', materialCodes)
 
     const existingCodes = new Set(existingMaterials?.map(m => m.material) || [])
-    
-    // Separar materiais novos dos existentes
     const newMaterials = processedMaterials.filter(m => !existingCodes.has(m.material))
     const duplicateMaterials = processedMaterials.filter(m => existingCodes.has(m.material))
     
-    console.log(`Materiais novos: ${newMaterials.length}`)
-    console.log(`Materiais duplicados: ${duplicateMaterials.length}`)
-
-    // Preparar dados para inserção com nova lógica de categoria
     const materialsToInsert = newMaterials.map(material => ({
       user_id: material.user_id,
       material: material.material,
       descricao: material.descricao,
-      diurno: material.categoria,   // Popular coluna diurno com categoria
-      noturno: material.categoria,  // Popular coluna noturno com categoria  
+      diurno: material.categoria,   
+      noturno: material.categoria, 
       created_at: material.created_at,
       updated_at: material.updated_at
     }))
 
-    // Inserir materiais em lotes
     const batchSize = 100
     let insertedCount = 0
     const insertErrors = []
@@ -243,7 +206,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log da atividade
     await logActivity({
       userId: decoded.userId,
       action: 'Upload de materiais',
@@ -288,7 +250,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Adicionar detalhes se houver problemas
     if (errors.length > 0 || insertErrors.length > 0 || duplicateMaterials.length > 0) {
       response.details = {
         ...(errors.length > 0 && { erros_processamento: errors.slice(0, 5) }),

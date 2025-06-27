@@ -4,7 +4,6 @@ import { supabaseAdmin } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 
 
-// Códigos específicos da melancia - agora suporta múltiplos tipos
 const MELANCIA_MATERIAL_CODES = ['100195', '142223', '154875']
 
 interface ProcessedMelanciaData {
@@ -200,23 +199,20 @@ async function processMelancia(params: {
         )
       `)
       .eq('separation_id', separationId)
-      .eq('material_code', materialCode) // Buscar apenas o código específico
+      .eq('material_code', materialCode)
 
     if (melanciaError || !melanciaItems || melanciaItems.length === 0) {
       throw new Error(`Material de melancia (código ${materialCode}) não encontrado na separação ativa`)
     }
 
-    // Como estamos buscando um código específico, deve retornar apenas um item
     const melanciaItem = melanciaItems[0]
 
-    // Criar um mapa para acesso rápido às quantidades por código de loja
     const melanciaQuantitiesMap = new Map<string, any>()
     
     melanciaItem.colhetron_separation_quantities.forEach((qty: any) => {
       melanciaQuantitiesMap.set(qty.store_code, qty)
     })
 
-    // Processar atualizações
     const updatedStores: string[] = []
     const notFoundStores: string[] = []
     let totalKgProcessed = 0
@@ -225,7 +221,6 @@ async function processMelancia(params: {
       const existingQuantity = melanciaQuantitiesMap.get(quantity.storeCode)
       
       if (existingQuantity) {
-        // Atualizar quantidade existente
         const { error: updateError } = await supabaseAdmin
           .from('colhetron_separation_quantities')
           .update({ quantity: quantity.kg })
@@ -237,7 +232,6 @@ async function processMelancia(params: {
           updatedStores.push(quantity.storeCode)
           totalKgProcessed += quantity.kg
           
-          // Registrar atividade de atualização de melancia
           await supabaseAdmin
             .from('colhetron_user_activities')
             .insert({
@@ -260,7 +254,6 @@ async function processMelancia(params: {
       }
     }
 
-    // Preparar resposta com informações sobre o item de melancia processado
     const melanciaItemsFound = [{
       materialCode: melanciaItem.material_code,
       description: melanciaItem.description

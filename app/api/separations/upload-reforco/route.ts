@@ -171,7 +171,6 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
   const stores: string[] = []
   const quantities: ProcessedReforcoData['quantities'] = []
 
-  // Encontrar última linha com dados na coluna A (material)
   let lastMaterialRow = 0
   for (let row = 1; row <= range.e.r; row++) {
     const materialCodeCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
@@ -184,8 +183,7 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
     throw new Error('Nenhum material encontrado na coluna A')
   }
 
-  // Encontrar última coluna com dados na linha 1 (lojas) - começa na coluna C (índice 2)
-  let lastStoreCol = 1 // Começar em B para garantir que tem pelo menos coluna C
+  let lastStoreCol = 1 
   for (let col = 2; col <= range.e.c; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
     const cell = worksheet[cellAddress]
@@ -199,7 +197,6 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
     throw new Error('Nenhuma loja encontrada na linha 1 a partir da coluna C')
   }
 
-  // Processar dados dos materiais (de 2 até a última linha encontrada)
   for (let row = 1; row <= lastMaterialRow; row++) {
     const materialCodeCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
     const descriptionCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 1 })]
@@ -216,7 +213,6 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
           rowNumber: row + 1 
         })
 
-        // Extrair quantidades para cada loja
         for (let col = 2; col <= lastStoreCol; col++) {
           const quantityCell = worksheet[XLSX.utils.encode_cell({ r: row, c: col })]
           const storeIndex = col - 2
@@ -259,7 +255,6 @@ async function processReforco(params: {
   const { userId, separationId, processedData, fileName } = params
 
   try {
-    // PRIMEIRO: Buscar TODAS as lojas da separação ativa
     const { data: allSeparationStores, error: storesError } = await supabaseAdmin
       .from('colhetron_separation_quantities')
       .select('store_code')
@@ -277,7 +272,6 @@ async function processReforco(params: {
 
     const allExistingStores = [...new Set(allSeparationStores.map(s => s.store_code))]
 
-    // Buscar cadastro de materiais pelo código para pegar a categoria correta da coluna diurno
     const materialCodes = processedData.materials.map(m => m.code)
     const { data: globalMaterials, error: materialsError } = await supabaseAdmin
       .from('colhetron_materiais')
@@ -316,7 +310,6 @@ async function processReforco(params: {
         let isNewMaterial = false
 
         if (itemError || !existingItem) {
-          // Material não existe na separação, criar novo
           const { data: newItem, error: createError } = await supabaseAdmin
             .from('colhetron_separation_items')
             .insert([{
@@ -344,7 +337,6 @@ async function processReforco(params: {
           updatedMaterialCodes.push(material.code)
         }
 
-        // Buscar TODAS as quantidades atuais deste material (todas as lojas)
         const { data: currentQuantities, error: quantitiesError } = await supabaseAdmin
           .from('colhetron_separation_quantities')
           .select('store_code, quantity')
@@ -360,7 +352,6 @@ async function processReforco(params: {
           currentQuantitiesMap.set(q.store_code, q.quantity)
         })
 
-        // Buscar as quantidades da planilha para este material
         const materialQuantities = processedData.quantities.filter(q => q.materialIndex === processedData.materials.indexOf(material))
         const reforcoQuantitiesMap = new Map<string, number>()
         
@@ -370,10 +361,9 @@ async function processReforco(params: {
 
         let hadRedistribution = false
 
-        // LÓGICA CORRIGIDA: Processar TODAS as lojas (da planilha E as que já existem)
         const allStoresToProcess = new Set([
-          ...processedData.stores, // Lojas da planilha de reforço
-          ...Array.from(currentQuantitiesMap.keys()) // Lojas que já tinham quantidade
+          ...processedData.stores,
+          ...Array.from(currentQuantitiesMap.keys())
         ])
 
         for (const storeCode of allStoresToProcess) {
@@ -394,13 +384,12 @@ async function processReforco(params: {
             redistributedItems++
             hadRedistribution = true
           } else {
-            // Se antes tinha 0 e continua 0 -> manter 0
             newQuantity = 0
           }
 
-          // Atualizar ou inserir a quantidade no banco
+
           if (currentQuantitiesMap.has(storeCode)) {
-            // Atualizar quantidade existente
+
             const { error: updateError } = await supabaseAdmin
               .from('colhetron_separation_quantities')
               .update({ quantity: newQuantity })
@@ -411,7 +400,6 @@ async function processReforco(params: {
               console.error(`Erro ao atualizar quantidade ${material.code}-${storeCode}:`, updateError)
             }
           } else if (newQuantity > 0) {
-            // Inserir nova quantidade (apenas se > 0)
             const { error: insertError } = await supabaseAdmin
               .from('colhetron_separation_quantities')
               .insert([{
@@ -440,7 +428,6 @@ async function processReforco(params: {
       }
     }
 
-    // Atualizar totais da separação
     const { error: updateSeparationError } = await supabaseAdmin
       .from('colhetron_separations')
       .update({

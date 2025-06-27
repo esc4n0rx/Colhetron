@@ -1,4 +1,4 @@
-// components/auth/RegisterForm.tsx
+
 "use client"
 
 import React, { useState } from 'react'
@@ -12,7 +12,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
-// components/auth/RegisterForm.tsx (continuação)
 import { 
  Eye, EyeOff, Mail, Lock, User, Loader2, 
  AlertCircle, CheckCircle, Shield, Check
@@ -43,7 +42,7 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
  const watchedFields = watch()
  const password = watch('password')
 
- // Função para calcular força da senha
+
  const getPasswordStrength = (password: string) => {
    if (!password) return { score: 0, label: '', color: '' }
    
@@ -104,7 +103,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
      animate={{ opacity: 1 }}
      transition={{ duration: 0.3 }}
    >
-     {/* Name Field */}
      <div className="space-y-2">
        <Label htmlFor="name" className="text-white text-sm font-medium">
          Nome completo
@@ -138,7 +136,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
        )}
      </div>
 
-     {/* Email Field */}
      <div className="space-y-2">
        <Label htmlFor="email" className="text-white text-sm font-medium">
          Email
@@ -172,7 +169,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
        )}
      </div>
 
-     {/* Password Field */}
      <div className="space-y-2">
        <Label htmlFor="password" className="text-white text-sm font-medium">
          Senha
@@ -201,7 +197,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
          </Button>
        </div>
 
-       {/* Password Strength Indicator */}
        {password && (
          <motion.div
            initial={{ opacity: 0, height: 0 }}
@@ -238,7 +233,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
        )}
      </div>
 
-     {/* Confirm Password Field */}
      <div className="space-y-2">
        <Label htmlFor="confirmPassword" className="text-white text-sm font-medium">
          Confirmar senha
@@ -281,7 +275,7 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
        )}
      </div>
 
-     {/* Password Requirements */}
+
      <motion.div
        initial={{ opacity: 0, height: 0 }}
        animate={{ opacity: 1, height: 'auto' }}
@@ -322,7 +316,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
        </div>
      </motion.div>
 
-     {/* Success Alert */}
      {success && (
        <motion.div
          initial={{ opacity: 0, y: -10 }}
@@ -337,7 +330,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
        </motion.div>
      )}
 
-     {/* Error Alert */}
      {error && (
        <motion.div
          initial={{ opacity: 0, y: -10 }}
@@ -352,7 +344,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
        </motion.div>
      )}
 
-     {/* Submit Button */}
      <Button
        type="submit"
        disabled={isLoading}

@@ -1,4 +1,3 @@
-// app/api/cadastro/materiais/route.ts (ATUALIZADO)
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -31,7 +30,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar materiais - REMOVIDO filtro por user_id para cadastro global
     const { data: materiais, error } = await supabaseAdmin
       .from('colhetron_materiais')
       .select('*')
@@ -45,12 +43,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Mapear dados para o novo formato
     const formattedMateriais = (materiais || []).map(material => ({
       id: material.id,
       material: material.material,
       descricao: material.descricao,
-      category: material.diurno || material.noturno || 'SECO', // Fallback para dados antigos
+      category: material.diurno || material.noturno || 'SECO',
       noturno: material.noturno,
       diurno: material.diurno
     }))
@@ -89,7 +86,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = materialSchema.parse(body)
 
-    // Verificar se já existe material com este código
     const { data: existingMaterial } = await supabaseAdmin
       .from('colhetron_materiais')
       .select('id')
@@ -103,7 +99,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Criar material com categoria dinâmica
     const { data: material, error } = await supabaseAdmin
       .from('colhetron_materiais')
       .insert([{
@@ -111,7 +106,7 @@ export async function POST(request: NextRequest) {
         material: validatedData.material,
         descricao: validatedData.descricao,
         diurno: validatedData.category,
-        noturno: validatedData.category, // Popular ambas as colunas
+        noturno: validatedData.category,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }])
@@ -133,7 +128,6 @@ export async function POST(request: NextRequest) {
       type: 'update'
     })
 
-    // Retornar material no formato esperado
     const formattedMaterial = {
       id: material.id,
       material: material.material,

@@ -1,4 +1,3 @@
-// app/api/media-analysis/data/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -16,7 +15,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Verificar se há separação ativa
     const { data: activeSeparation } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -24,7 +22,6 @@ export async function GET(request: NextRequest) {
       .eq('status', 'active')
       .single()
 
-    // Buscar APENAS dados da tabela colhetron_media_analysis
     const { data: mediaItems, error } = await supabaseAdmin
       .from('colhetron_media_analysis')
       .select('*')
@@ -36,7 +33,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar dados' }, { status: 500 })
     }
 
-    // Se não há dados na tabela, retorna vazio
     if (!mediaItems || mediaItems.length === 0) {
       return NextResponse.json({ 
         data: [], 
