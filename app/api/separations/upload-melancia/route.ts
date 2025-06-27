@@ -1,13 +1,11 @@
-// app/api/separations/upload-melancia/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
-// Código específico da melancia
-const MELANCIA_MATERIAL_CODE = '100195'
+// Códigos específicos da melancia - agora suporta múltiplos tipos
+const MELANCIA_MATERIAL_CODES = ['100195', '142223', '154875']
 
 interface ProcessedMelanciaData {
   stores: string[]
@@ -22,7 +20,31 @@ interface MelanciaProcessingResult {
   updatedStores: number
   notFoundStores: string[]
   totalKgProcessed: number
-  melanciaItemFound: boolean
+  melanciaItemsFound: Array<{
+    materialCode: string
+    description: string
+  }>
+}
+
+/**
+ * Função para converter números com vírgula para float
+ * Adaptada do PasteDataModal para manter consistência
+ */
+function parseNumber(value: string | number | undefined | null): number {
+  if (value === undefined || value === null || value === '') return 0
+  
+  if (typeof value === 'number') {
+    return isNaN(value) ? 0 : value
+  }
+  
+  // Remove espaços e substitui vírgula por ponto
+  // Remove pontos que são separadores de milhares (mantém apenas a última vírgula/ponto como decimal)
+  const cleanValue = String(value).trim()
+    .replace(/\./g, '') // Remove pontos de milhares
+    .replace(',', '.') // Substitui vírgula decimal por ponto
+  
+  const parsed = parseFloat(cleanValue)
+  return isNaN(parsed) ? 0 : parsed
 }
 
 export async function POST(request: NextRequest) {
@@ -62,10 +84,18 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file') as File
+    const materialCode = formData.get('materialCode') as string
 
     if (!file) {
       return NextResponse.json(
         { error: 'Nenhum arquivo enviado' },
+        { status: 400 }
+      )
+    }
+
+    if (!materialCode || !MELANCIA_MATERIAL_CODES.includes(materialCode)) {
+      return NextResponse.json(
+        { error: `Código de material inválido. Códigos aceitos: ${MELANCIA_MATERIAL_CODES.join(', ')}` },
         { status: 400 }
       )
     }
@@ -79,7 +109,8 @@ export async function POST(request: NextRequest) {
       userId: decoded.userId,
       separationId: separation.id,
       processedData,
-      fileName: file.name
+      fileName: file.name,
+      materialCode // Passar o código específico
     })
 
     if (result.error) {
@@ -125,9 +156,10 @@ async function processExcelFile(buffer: Uint8Array): Promise<ProcessedMelanciaDa
 
     if (lojaCell && lojaCell.v && kgCell && kgCell.v !== undefined) {
       const storeCode = String(lojaCell.v).trim()
-      const kg = Number(kgCell.v)
+      // Usar a função parseNumber para aceitar números com vírgula
+      const kg = parseNumber(kgCell.v)
 
-      if (storeCode && !isNaN(kg) && kg >= 0) {
+      if (storeCode && kg >= 0) {
         stores.push(storeCode)
         quantities.push({
           storeCode,
@@ -149,12 +181,13 @@ async function processMelancia(params: {
   separationId: string
   processedData: ProcessedMelanciaData
   fileName: string
+  materialCode: string // Novo parâmetro
 }): Promise<{ data: MelanciaProcessingResult | null; error: string | null }> {
-  const { separationId, processedData, fileName } = params
+  const { separationId, processedData, fileName, materialCode } = params
 
   try {
-    // Buscar o item específico da melancia (código 100195) na separação ativa
-    const { data: melanciaItem, error: melanciaError } = await supabaseAdmin
+    // Buscar o item específico da melancia (código específico) na separação ativa
+    const { data: melanciaItems, error: melanciaError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select(`
         id,
@@ -167,69 +200,88 @@ async function processMelancia(params: {
         )
       `)
       .eq('separation_id', separationId)
-      .eq('material_code', MELANCIA_MATERIAL_CODE)
-      .single()
+      .eq('material_code', materialCode) // Buscar apenas o código específico
 
-    if (melanciaError || !melanciaItem) {
-      throw new Error(`Material melancia (código ${MELANCIA_MATERIAL_CODE}) não encontrado na separação ativa. Verifique se este produto está incluído na separação.`)
+    if (melanciaError || !melanciaItems || melanciaItems.length === 0) {
+      throw new Error(`Material de melancia (código ${materialCode}) não encontrado na separação ativa`)
     }
 
-    console.log(`🍉 Encontrado item de melancia: ${melanciaItem.material_code} - ${melanciaItem.description}`)
+    // Como estamos buscando um código específico, deve retornar apenas um item
+    const melanciaItem = melanciaItems[0]
 
-    let processedStores = 0
-    let updatedStores = 0
+    // Criar um mapa para acesso rápido às quantidades por código de loja
+    const melanciaQuantitiesMap = new Map<string, any>()
+    
+    melanciaItem.colhetron_separation_quantities.forEach((qty: any) => {
+      melanciaQuantitiesMap.set(qty.store_code, qty)
+    })
+
+    // Processar atualizações
+    const updatedStores: string[] = []
     const notFoundStores: string[] = []
     let totalKgProcessed = 0
 
-    // Criar mapa das quantidades atuais por loja
-    const currentQuantitiesMap = new Map<string, { id: string; quantity: number }>()
-    melanciaItem.colhetron_separation_quantities.forEach(q => {
-      currentQuantitiesMap.set(q.store_code, { id: q.id, quantity: q.quantity })
-    })
-
-    // Processar cada loja da planilha
-    for (const { storeCode, kg } of processedData.quantities) {
-      const currentQuantity = currentQuantitiesMap.get(storeCode)
-
-      if (currentQuantity) {
-        // Loja existe na separação, atualizar quantidade
+    for (const quantity of processedData.quantities) {
+      const existingQuantity = melanciaQuantitiesMap.get(quantity.storeCode)
+      
+      if (existingQuantity) {
+        // Atualizar quantidade existente
         const { error: updateError } = await supabaseAdmin
           .from('colhetron_separation_quantities')
-          .update({ quantity: kg })
-          .eq('id', currentQuantity.id)
+          .update({ quantity: quantity.kg })
+          .eq('id', existingQuantity.id)
 
         if (updateError) {
-          console.error(`❌ Erro ao atualizar quantidade para loja ${storeCode}:`, updateError)
-          continue
+          console.error(`Erro ao atualizar loja ${quantity.storeCode}:`, updateError)
+        } else {
+          updatedStores.push(quantity.storeCode)
+          totalKgProcessed += quantity.kg
+          
+          // Registrar atividade de atualização de melancia
+          await supabaseAdmin
+            .from('colhetron_user_activities')
+            .insert({
+              user_id: params.userId,
+              action: 'upload_melancia',
+              details: `Melancia ${melanciaItem.material_code} atualizada: Loja ${quantity.storeCode} - ${quantity.kg}kg`,
+              type: 'update',
+              metadata: {
+                separationId: separationId,
+                materialCode: melanciaItem.material_code,
+                materialDescription: melanciaItem.description,
+                storeCode: quantity.storeCode,
+                quantity: quantity.kg,
+                fileName: fileName
+              }
+            })
         }
-
-        console.log(`✅ Atualizada loja ${storeCode}: ${currentQuantity.quantity} → ${kg} kg`)
-        updatedStores++
-        totalKgProcessed += kg
       } else {
-        // Loja não existe na separação para o item melancia
-        notFoundStores.push(storeCode)
+        notFoundStores.push(quantity.storeCode)
       }
-
-      processedStores++
     }
+
+    // Preparar resposta com informações sobre o item de melancia processado
+    const melanciaItemsFound = [{
+      materialCode: melanciaItem.material_code,
+      description: melanciaItem.description
+    }]
 
     return {
       data: {
-        processedStores,
-        updatedStores,
+        processedStores: processedData.stores.length,
+        updatedStores: updatedStores.length,
         notFoundStores,
         totalKgProcessed,
-        melanciaItemFound: true
+        melanciaItemsFound
       },
       error: null
     }
 
   } catch (error) {
-    console.error('Erro no processamento da melancia:', error)
+    console.error('Erro ao processar melancia:', error)
     return {
       data: null,
-      error: error instanceof Error ? error.message : 'Erro desconhecido no processamento'
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
     }
   }
 }

@@ -216,9 +216,9 @@ export function usePedidosData() {
 
   /**
    * Função para upload de separação de melancia
-   * Busca melancias na separação ativa e atualiza quantidades em KG
+   * Busca melancia específica na separação ativa e atualiza quantidades em KG
    */
-  const uploadMelancia = async (file: File): Promise<UploadMelanciaResponse> => {
+  const uploadMelancia = async (file: File, materialCode: string): Promise<UploadMelanciaResponse> => {
     try {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
@@ -226,6 +226,7 @@ export function usePedidosData() {
       // Preparar FormData
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('materialCode', materialCode) // Adicionar o código do material
 
       const response = await fetch('/api/separations/upload-melancia', {
         method: 'POST',

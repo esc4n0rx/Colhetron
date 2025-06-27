@@ -395,30 +395,29 @@ export default function PedidosTab() {
     const startWidth = columnWidths[column] || 80 // 80 é o nosso fallback.
     setResizing({ column, startX, startWidth })
   }, [columnWidths])
-
-
-  // --- NOVO HANDLER PARA MELANCIA ---
-const handleMelanciaUpload = async (file: File) => {
-  setIsUploadingMelancia(true)
-try {
-    const result = await uploadMelancia(file)
-    if (result.success) {
-    let message = "Separação de melancia carregada! ${result.updatedStores} lojas atualizadas"
-    if (result.notFoundStores && result.notFoundStores.length > 0) {
-    message += `. Lojas não encontradas: ${result.notFoundStores.join(', ')}`
-    }
-    toast.success(message)
-    setIsMelanciaModalOpen(false)
-  } else {
-  throw new Error(result.error)
-  }
+  
+  // --- NOVO HANDLER PARA MELANCIA ATUALIZADO ---
+  const handleMelanciaUpload = async (file: File, materialCode: string) => {
+    setIsUploadingMelancia(true)
+    try {
+      const result = await uploadMelancia(file, materialCode)
+      if (result.success) {
+        let message = `Separação de melancia carregada! ${result.updatedStores} lojas atualizadas`
+        if (result.notFoundStores && result.notFoundStores.length > 0) {
+          message += `. Lojas não encontradas: ${result.notFoundStores.join(', ')}`
+        }
+        toast.success(message)
+        setIsMelanciaModalOpen(false)
+      } else {
+        throw new Error(result.error)
+      }
     } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar separação de melancia'
-    toast.error(errorMessage)
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao carregar melancia'
+      toast.error(errorMessage)
     } finally {
-    setIsUploadingMelancia(false)
+      setIsUploadingMelancia(false)
     }
-}
+  }
 
   // Efeito que "ouve" o movimento do mouse pra fazer o redimensionamento em si.
   useEffect(() => {
