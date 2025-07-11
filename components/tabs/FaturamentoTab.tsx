@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react'
+"use client"
+
+import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Loader2, AlertTriangle, Download, CheckCircle, XCircle } from 'lucide-react'
-import { useAuth } from '@/contexts/AuthContext'
+import { Loader2, AlertTriangle, Download, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface MediaAnalysisStatus {
@@ -31,16 +32,23 @@ interface FaturamentoItem {
 export function FaturamentoTab() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false)
+  
+  // Modal de erros de status (CRÍTICO/ATENÇÃO)
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [mediaStatus, setMediaStatus] = useState<MediaAnalysisStatus | null>(null)
+  
+  // State e Modal para o erro de médias não encontradas
+  const [showMissingMediaModal, setShowMissingMediaModal] = useState(false)
+  const [missingMediaError, setMissingMediaError] = useState<string | null>(null)
+
   const [faturamentoData, setFaturamentoData] = useState<FaturamentoItem[]>([])
   const [currentPage, setCurrentPage] = useState(1)
-  const { user } = useAuth()
-
+  
   const itemsPerPage = 10
 
   const checkMediaAnalysisStatus = async () => {
     setIsLoading(true)
+    setFaturamentoData([]) // Limpa dados antigos ao iniciar nova análise
     try {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
@@ -57,9 +65,8 @@ export function FaturamentoTab() {
       const data = await response.json()
       setMediaStatus(data)
 
-      if (data.itemsWithError > 0 && data.itemsWithError <= 10) {
-        setShowErrorModal(true)
-      } else if (data.itemsWithError > 10) {
+      if (data.itemsWithError > 0) {
+        setCurrentPage(1); // Reseta a paginação ao abrir o modal
         setShowErrorModal(true)
       } else {
         await generateFaturamentoTable()
@@ -88,13 +95,12 @@ export function FaturamentoTab() {
 
       const data = await response.json()
       setFaturamentoData(data.items)
-      toast.success('Tabela de faturamento gerada com sucesso!')
+      toast.success('Tabela de faturamento gerada com sucesso! Agora você pode gerar o template Excel.')
     } catch (error) {
       console.error('Erro ao gerar tabela:', error)
       toast.error(error instanceof Error ? error.message : 'Erro ao gerar tabela')
     }
   }
-
 
   const generateExcelTemplate = async () => {
     setIsGeneratingTemplate(true)
@@ -108,8 +114,14 @@ export function FaturamentoTab() {
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Erro ao gerar template Excel')
+        const errorData = await response.json()
+        if (response.status === 400 && errorData.error?.includes('Médias não encontradas')) {
+            setMissingMediaError(errorData.error)
+            setShowMissingMediaModal(true)
+        } else {
+            toast.error(errorData.error || 'Erro ao gerar template Excel')
+        }
+        return
       }
 
       const blob = await response.blob()
@@ -148,7 +160,7 @@ export function FaturamentoTab() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4">
             <Button
               onClick={checkMediaAnalysisStatus}
               disabled={isLoading}
@@ -198,7 +210,7 @@ export function FaturamentoTab() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-gray-700 bg-gray-800/50">
+                  <TableRow className="border-gray-700 bg-gray-800/50 hover:bg-gray-800/50">
                     <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
                       COD_LOJA_SAP
                     </TableHead>
@@ -212,7 +224,7 @@ export function FaturamentoTab() {
                 </TableHeader>
                 <TableBody>
                   {faturamentoData.map((item, index) => (
-                    <TableRow key={index} className="border-gray-700 hover:bg-gray-700/50">
+                    <TableRow key={`${item.centro}-${item.material}-${index}`} className="border-gray-700 hover:bg-gray-700/50">
                       <TableCell className="text-gray-300 text-center border-r border-gray-700">
                         {item.centro}
                       </TableCell>
@@ -232,24 +244,22 @@ export function FaturamentoTab() {
       )}
 
       <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-4xl max-h-[80vh]">
+        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-4xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center text-red-400">
               <XCircle className="w-5 h-5 mr-2" />
               Itens com Status Incorreto ({mediaStatus?.itemsWithError} de {mediaStatus?.totalItems})
             </DialogTitle>
           </DialogHeader>
-          
-          <div className="space-y-4">
+          <div className="space-y-4 flex-grow overflow-y-auto">
             <p className="text-gray-300">
-              Os seguintes itens não estão com status "OK" na análise de médias. 
+              Os seguintes itens não estão com status "OK" na análise de médias.
               Por favor, ajuste-os antes de continuar:
             </p>
-
             <ScrollArea className="h-96 border border-gray-700 rounded">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-gray-700">
+                  <TableRow className="border-gray-700 sticky top-0 bg-gray-900">
                     <TableHead className="text-gray-300">Código</TableHead>
                     <TableHead className="text-gray-300">Material</TableHead>
                     <TableHead className="text-gray-300">Status</TableHead>
@@ -259,22 +269,23 @@ export function FaturamentoTab() {
                 <TableBody>
                   {paginatedErrorItems.map((item) => (
                     <TableRow key={item.id} className="border-gray-700">
-                      <TableCell className="text-gray-300">{item.codigo}</TableCell>
+                      <TableCell className="text-gray-300 font-mono">{item.codigo}</TableCell>
                       <TableCell className="text-gray-300">{item.material}</TableCell>
                       <TableCell>
                         <Badge variant={item.status === 'CRÍTICO' ? 'destructive' : 'secondary'}>
                           {item.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-gray-300">{item.error}</TableCell>
+                      <TableCell className="text-yellow-400">{item.error}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </ScrollArea>
-
+          </div>
+          <div className="pt-4 space-y-4">
             {totalPages > 1 && (
-              <div className="flex justify-center gap-2">
+              <div className="flex justify-center items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -284,8 +295,8 @@ export function FaturamentoTab() {
                 >
                   Anterior
                 </Button>
-                <span className="px-3 py-1 text-gray-300">
-                  {currentPage} de {totalPages}
+                <span className="px-3 py-1 text-sm text-gray-300">
+                  Página {currentPage} de {totalPages}
                 </span>
                 <Button
                   variant="outline"
@@ -298,7 +309,6 @@ export function FaturamentoTab() {
                 </Button>
               </div>
             )}
-
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
@@ -316,6 +326,48 @@ export function FaturamentoTab() {
               >
                 Ir para Análise de Médias
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={showMissingMediaModal} onOpenChange={setShowMissingMediaModal}>
+        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-yellow-400">
+              <AlertTriangle className="w-5 h-5 mr-2" />
+              Pendência na Análise de Médias
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-gray-300">
+                Não foi possível gerar o template porque um ou mais materiais estão sem a média do sistema definida.
+            </p>
+            <div className="bg-gray-800 p-4 rounded-md border border-gray-700 max-h-60 overflow-y-auto">
+                <p className="text-sm font-mono text-white whitespace-pre-wrap">
+                    {missingMediaError}
+                </p>
+            </div>
+            <p className="text-gray-300">
+                Por favor, acesse a aba "Análise de Médias" para cadastrar as médias dos itens listados acima.
+            </p>
+            <div className="flex justify-end gap-2 pt-4">
+                <Button
+                    variant="outline"
+                    onClick={() => setShowMissingMediaModal(false)}
+                    className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-gray-200"
+                >
+                    Fechar
+                </Button>
+                <Button
+                    onClick={() => {
+                        setShowMissingMediaModal(false);
+                        toast.info('Navegue até a aba "Análise de Médias" para corrigir as pendências.');
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700"
+                >
+                    Entendido
+                </Button>
             </div>
           </div>
         </DialogContent>
