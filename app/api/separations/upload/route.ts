@@ -277,7 +277,7 @@ async function createSeparation(params: {
         material_code: material.code,
         description: material.description,
         row_number: material.rowNumber,
-        type_separation: materialTypeMap.get(material.code) || 'SECO'
+        type_separation: materialTypeMap.get(material.code)
       }))
       materialBatches.push(batch)
     }
