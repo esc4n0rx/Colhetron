@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     const userStats = users?.map(user => {
       const userSeparacoes = separacoes?.filter(sep => sep.user_id === user.id) || []
-      const separacoesFinalizadas = userSeparacoes.filter(sep => sep.status === 'finalized')
+      const separacoesFinalizadas = userSeparacoes.filter(sep => sep.status === 'completed')
       
       const totalSeparacoes = userSeparacoes.length
       const totalFinalizadas = separacoesFinalizadas.length

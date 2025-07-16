@@ -97,33 +97,56 @@ export default function SeparacaoTab() {
     )
   }, [orderedStores, filteredData])
 
-  // ✅ NOVO: Filtra os materiais para exibir apenas linhas com quantidades > 0 nas lojas visíveis
+  // Filtra os materiais para exibir apenas linhas com quantidades > 0 nas lojas visíveis
   const visibleData = useMemo(() => {
     if (!visibleStores.length || !filteredData.length) return [];
-    // Retorna apenas itens que têm quantidade em pelo menos uma das lojas visíveis
     return filteredData.filter(item =>
       visibleStores.some(store => (item[store.prefixo] as number) > 0)
     );
   }, [filteredData, visibleStores]);
   
-  // Função para gerar e imprimir o relatório
   const handlePrint = useCallback(() => {
     if (visibleData.length === 0 || visibleStores.length === 0) return;
 
+    // ✅ AJUSTE: CSS otimizado para impressão
     const printStyles = `
       <style>
         @media print {
-          @page { size: landscape; margin: 0.8cm; }
-          body { font-family: Arial, sans-serif; font-size: 12pt; color: #000; }
+          /* 1. Otimiza o uso da página com margens menores */
+          @page { 
+            size: landscape; 
+            margin: 0.5cm; 
+          }
+          
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          body { font-family: Arial, sans-serif; font-size: 10pt; color: #000; }
           .page-container { break-after: page; }
           .page-container:last-child { break-after: avoid; }
           .print-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; border-bottom: 2px solid #ccc; padding-bottom: 0.5rem; }
-          .header-info h1 { font-size: 20pt; margin: 0; font-weight: bold; }
-          .header-info p { font-size: 14pt; margin: 0; }
-          .header-datetime { text-align: right; font-size: 10pt; }
-          .filter-info { background-color: #f5f5f5; padding: 0.5rem; margin-bottom: 1rem; border-radius: 4px; font-size: 10pt; }
+          .header-info h1 { font-size: 18pt; margin: 0; font-weight: bold; }
+          .header-info p { font-size: 12pt; margin: 0; }
+          .header-datetime { text-align: right; font-size: 9pt; }
+          .filter-info { background-color: #f5f5f5; padding: 0.5rem; margin-bottom: 1rem; border-radius: 4px; font-size: 9pt; }
           table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-          th, td { border: 1px solid #000; padding: 5px; text-align: left; word-break: break-word; font-size: 9pt; }
+          
+          /* 2. Compacta a tabela para caber mais linhas */
+          th, td { 
+            border: 1px solid #4A5568; 
+            padding: 4px; 
+            text-align: left; 
+            word-break: break-word; 
+            font-size: 8pt; 
+          }
+
+          /* 3. Garante que o cabeçalho da tabela se repita em cada nova página */
+          thead {
+            display: table-header-group;
+          }
+
           .text-center { text-align: center; }
           .store-header { writing-mode: vertical-lr; text-orientation: mixed; min-width: 35px; max-width: 35px; white-space: nowrap; }
         }
@@ -142,13 +165,14 @@ export default function SeparacaoTab() {
     const pagesHtml = storeChunks.map((storeChunk, index) => {
       const isLastPage = index === storeChunks.length - 1;
       
-      const highlightStyle = `font-weight: bold; background-color: #e9ecef;`;
+      const highlightStyle = 'background-color:rgb(32, 32, 32); color:rgb(250, 247, 247); font-weight: bold;';
+      const totalCellStyle = 'font-weight: bold; text-align: center;';
 
       const tableHeader = `
         <thead>
           <tr>
             <th style="${highlightStyle} min-width: 180px;">MATERIAL SEPARAÇÃO</th>
-            ${storeChunk.map(store => `<th class="text-center store-header">${store.prefixo}</th>`).join('')}
+            ${storeChunk.map(store => `<th class="text-center store-header" style="${highlightStyle}">${store.prefixo}</th>`).join('')}
             ${isLastPage ? `<th class="text-center" style="${highlightStyle}">TOTAL</th>` : ''}
           </tr>
         </thead>
@@ -158,7 +182,6 @@ export default function SeparacaoTab() {
         <tbody>
           ${visibleData.map(item => {
             const rowTotalAllStores = visibleStores.reduce((sum, store) => sum + ((item[store.prefixo] as number) || 0), 0);
-            // Renderiza a linha apenas se tiver quantidade em alguma loja da página atual
             if (!storeChunk.some(store => (item[store.prefixo] as number) > 0)) {
               return '';
             }
@@ -169,34 +192,14 @@ export default function SeparacaoTab() {
                   const quantity = (item[store.prefixo] as number) || 0;
                   return `<td class="text-center">${quantity || ''}</td>`;
                 }).join('')}
-                ${isLastPage ? `<td class="text-center" style="${highlightStyle}">${rowTotalAllStores || ''}</td>` : ''}
+                ${isLastPage ? `<td style="${totalCellStyle}">${rowTotalAllStores || ''}</td>` : ''}
               </tr>
             `;
           }).join('')}
         </tbody>
       `;
       
-      const tableFooter = `
-        <tfoot>
-          <tr>
-            <td style="${highlightStyle}">Total Loja</td>
-            ${storeChunk.map(store => {
-              // ✅ CORREÇÃO: Soma apenas os dados visíveis na tabela
-              const totalForStoreOnPage = visibleData.reduce((sum, item) => {
-                // Soma apenas se a linha for relevante para a página atual
-                if (storeChunk.some(s => (item[s.prefixo] as number) > 0)) {
-                  return sum + ((item[store.prefixo] as number) || 0);
-                }
-                return sum;
-              }, 0);
-              return `<td class="text-center" style="${highlightStyle}">${totalForStoreOnPage || ''}</td>`;
-            }).join('')}
-            ${isLastPage ? `<td style="${highlightStyle}"></td>` : ''}
-          </tr>
-        </tfoot>
-      `;
-
-      return `<div class="page-container"><table>${tableHeader}${tableBody}${tableFooter}</table></div>`;
+      return `<div class="page-container"><table>${tableHeader}${tableBody}</table></div>`;
     }).join('');
 
     const printContent = `<html><head><title>${reportTitle}</title>${printStyles}</head><body><div class="print-header"><div class="header-info"><h1>Sistema Colhetron</h1><p>${reportTitle}</p></div><div class="header-datetime">${now.toLocaleDateString('pt-BR')} <br/>${now.toLocaleTimeString('pt-BR')}</div></div><div class="filter-info"><strong>Filtros Aplicados:</strong> Tipo: ${filtroTipo} | Zona: ${filtroZona} | Subzona: ${filtroSubzona}</div>${pagesHtml}</body></html>`;
@@ -320,21 +323,20 @@ export default function SeparacaoTab() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-gray-700 bg-gray-800/50">
-                  <TableHead className="text-gray-300 font-semibold text-xs border-r border-gray-700 min-w-80">MATERIAL SEPARAÇÃO</TableHead>
+                <TableRow className="border-gray-700 hover:bg-transparent">
+                  <TableHead className="bg-gray-700 text-white font-bold text-xs border-r border-gray-700 min-w-80 sticky left-0 z-10">MATERIAL SEPARAÇÃO</TableHead>
                   {visibleStores.map((store) => (
-                    <TableHead key={store.prefixo} className="text-gray-300 font-semibold text-xs text-center border-r border-gray-700 w-12">
+                    <TableHead key={store.prefixo} className="bg-gray-700 text-white font-bold text-xs text-center border-r border-gray-700 w-12">
                         {store.prefixo}
                     </TableHead>
                   ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* ✅ CORREÇÃO: Renderiza a partir de visibleData para mostrar apenas linhas com valores */}
                 {visibleData.length > 0 ? (
                   visibleData.map((item) => (
                     <TableRow key={item.id} className="border-gray-700 hover:bg-gray-800/30 transition-colors">
-                      <TableCell className="text-white text-xs border-r border-gray-700">{item.material}</TableCell>
+                      <TableCell className="bg-gray-700 text-white font-bold text-xs border-r border-gray-700 sticky left-0 z-10">{item.material}</TableCell>
                       {visibleStores.map((store) => (
                         <TableCell key={store.prefixo} className="text-center text-xs border-r border-gray-700">
                           <span className={`${(item[store.prefixo] as number) > 0 ? "text-green-400 font-semibold" : "text-gray-500"}`}>
@@ -352,18 +354,17 @@ export default function SeparacaoTab() {
                   </TableRow>
                 )}
               </TableBody>
-              {/* ✅ CORREÇÃO: Calcula totais a partir de visibleData para refletir a soma correta */}
               {visibleData.length > 0 && visibleStores.length > 0 && (
                 <tfoot>
-                  <TableRow className="bg-gray-800 border-t-2 border-gray-700">
-                    <TableHead className="text-right text-white font-bold text-sm pr-4">Total Loja</TableHead>
+                  <TableRow className="bg-gray-800 border-t-2 border-gray-700 hover:bg-gray-800">
+                    <TableHead className="bg-gray-700 text-white font-bold text-sm text-right pr-4 sticky left-0 z-10">Total Loja</TableHead>
                     {visibleStores.map((store) => {
-                       const totalForStore = visibleData.reduce((sum, item) => sum + ((item[store.prefixo] as number) || 0), 0);
-                       return (
+                        const totalForStore = visibleData.reduce((sum, item) => sum + ((item[store.prefixo] as number) || 0), 0);
+                        return (
                           <TableCell key={`total-${store.prefixo}`} className="text-center text-white font-bold text-sm">
                             {totalForStore}
                           </TableCell>
-                       );
+                        );
                     })}
                   </TableRow>
                 </tfoot>
