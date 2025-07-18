@@ -27,7 +27,7 @@ export const usePedidosGeradosData = (): UsePedidosGeradosDataReturn => {
       setIsLoading(true)
       setError(null)
       
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('colhetron_token')
       if (!token) {
         throw new Error('Token não encontrado')
       }
@@ -54,7 +54,7 @@ export const usePedidosGeradosData = (): UsePedidosGeradosDataReturn => {
 
   const addItems = useCallback(async (items: PedidosGeradosFormData[]) => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('colhetron_token')
       if (!token) {
         throw new Error('Token não encontrado')
       }
@@ -83,13 +83,9 @@ export const usePedidosGeradosData = (): UsePedidosGeradosDataReturn => {
     }
   }, [fetchData])
 
-  const refresh = useCallback(async () => {
-    await fetchData()
-  }, [fetchData])
-
   const clearData = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('colhetron_token')
       if (!token) {
         throw new Error('Token não encontrado')
       }
@@ -102,7 +98,8 @@ export const usePedidosGeradosData = (): UsePedidosGeradosDataReturn => {
       })
 
       if (!response.ok) {
-        throw new Error('Erro ao limpar dados')
+        const error = await response.json()
+        throw new Error(error.error || 'Erro ao limpar dados')
       }
 
       await fetchData()
@@ -119,7 +116,7 @@ export const usePedidosGeradosData = (): UsePedidosGeradosDataReturn => {
     fetchData()
   }, [fetchData])
 
-  const canAddItems = Boolean(separationInfo?.isActive)
+  const canAddItems = separationInfo?.isActive || false
 
   return {
     data,
@@ -128,7 +125,7 @@ export const usePedidosGeradosData = (): UsePedidosGeradosDataReturn => {
     separationInfo,
     canAddItems,
     addItems,
-    refresh,
+    refresh: fetchData,
     clearData
   }
 }
