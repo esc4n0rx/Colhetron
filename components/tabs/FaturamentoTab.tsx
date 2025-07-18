@@ -96,13 +96,30 @@ export default function FaturamentoTab() {
 
       if (!response.ok) {
         const error = await response.json()
+        
+        // Verificar se é um erro de materiais sem análise de média
+        if (error.missingMaterials && error.missingMaterials.length > 0) {
+          // Converter os materiais sem análise para o formato esperado pelo modal
+          const missingItems: MissingMediaItem[] = error.missingMaterials.map((material: string) => ({
+            material: material,
+            description: `Material ${material}`,
+            quantidade: 0,
+            lojas: []
+          }))
+          
+          setMissingMediaItems(missingItems)
+          setShowMissingMediaModal(true)
+          setProcessingStep('idle')
+          return false
+        }
+        
         throw new Error(error.error || 'Erro ao verificar status das médias')
       }
 
       const data = await response.json()
       setMediaStatus(data)
 
-      // Se há erros, mostrar modal e parar o processo
+      // Se há erros de status, mostrar modal de erro e parar o processo
       if (data.itemsWithError > 0) {
         setShowErrorModal(true)
         setProcessingStep('idle')
@@ -112,7 +129,7 @@ export default function FaturamentoTab() {
       return true
     } catch (error) {
       console.error('Erro ao verificar status:', error)
-      toast.error(error instanceof Error ? error.message : 'Erro ao verificar status das médias')
+      toast.error(error instanceof Error ? error.message : 'Erro desconhecido')
       setProcessingStep('idle')
       return false
     }
@@ -120,10 +137,10 @@ export default function FaturamentoTab() {
 
   const generateFaturamentoTable = async () => {
     try {
+      setProcessingStep('generating_table')
+      
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
-
-      setProcessingStep('generating_table')
 
       const response = await fetch('/api/faturamento/generate-table', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -138,52 +155,29 @@ export default function FaturamentoTab() {
       setFaturamentoData(data.items)
       setProcessingStep('ready_for_excel')
       
-      toast.success(`Tabela gerada com sucesso! ${data.items.length} itens processados.`)
     } catch (error) {
       console.error('Erro ao gerar tabela:', error)
-      toast.error(error instanceof Error ? error.message : 'Erro ao gerar tabela')
+      toast.error(error instanceof Error ? error.message : 'Erro desconhecido')
       setProcessingStep('idle')
     }
   }
 
   const generateExcelTemplate = async () => {
-    setIsGeneratingExcel(true)
     try {
+      setIsGeneratingExcel(true)
+      
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
 
       const response = await fetch('/api/faturamento/generate-excel', {
-        method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        
-        // Tratar erro específico de médias não encontradas
-        if (response.status === 400 && errorData.error?.includes('Médias não encontradas')) {
-          // Extrair lista de materiais do erro
-          const errorMessage = errorData.error
-          const materialsMatch = errorMessage.match(/: (.+)\. Execute/)
-          
-          if (materialsMatch) {
-            const materials = materialsMatch[1].split(', ')
-            const missingItems: MissingMediaItem[] = materials.map((material: string) => ({
-              material: material.trim(),
-              quantidade: 0, // Será preenchido pela API posteriormente
-              lojas: [] // Será preenchido pela API posteriormente
-            }))
-            
-            setMissingMediaItems(missingItems)
-            setShowMissingMediaModal(true)
-          }
-        } else {
-          toast.error(errorData.error || 'Erro ao gerar template Excel')
-        }
-        return
+        const error = await response.json()
+        throw new Error(error.error || 'Erro ao gerar template Excel')
       }
 
-      // Download do arquivo Excel
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -191,10 +185,11 @@ export default function FaturamentoTab() {
       a.download = `faturamento_${new Date().toISOString().split('T')[0]}.xlsx`
       document.body.appendChild(a)
       a.click()
-      window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-
-      toast.success('Template Excel gerado e baixado com sucesso!')
+      window.URL.revokeObjectURL(url)
+      
+      toast.success('Template Excel gerado com sucesso!')
+      
     } catch (error) {
       console.error('Erro ao gerar Excel:', error)
       toast.error(error instanceof Error ? error.message : 'Erro ao gerar template Excel')
@@ -252,165 +247,163 @@ export default function FaturamentoTab() {
           <CardTitle className="text-white apple-font flex items-center">
             <Calculator className="w-5 h-5 mr-2" />
             Faturamento - Geração de Template Excel
-         </CardTitle>
-       </CardHeader>
-       <CardContent className="space-y-4">
-         {/* Indicador de Progresso */}
-         {processingStep !== 'idle' && (
-           <div className="space-y-2">
-             <div className="flex items-center justify-between text-sm">
-               <span className="text-gray-300">{getProcessingStepText()}</span>
-               <span className="text-gray-400">{getProcessingProgress()}%</span>
-             </div>
-             <div className="w-full bg-gray-700 rounded-full h-2">
-               <div 
-                 className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                 style={{ width: `${getProcessingProgress()}%` }}
-               />
-             </div>
-           </div>
-         )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Indicador de Progresso */}
+          {processingStep !== 'idle' && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-300">{getProcessingStepText()}</span>
+                <span className="text-gray-400">{getProcessingProgress()}%</span>
+              </div>
+              <div className="w-full bg-gray-700 rounded-full h-2">
+                <div 
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${getProcessingProgress()}%` }}
+                />
+              </div>
+            </div>
+          )}
 
-         {/* Botões de Ação */}
-         <div className="flex flex-wrap gap-4">
-           <Button
-             onClick={startFaturamentoProcess}
-             disabled={processingStep !== 'idle' && processingStep !== 'ready_for_excel'}
-             className="bg-blue-600 hover:bg-blue-700 text-white"
-           >
-             {processingStep === 'idle' ? (
-               <>
-                 <Calculator className="w-4 h-4 mr-2" />
-                 Iniciar Processo de Faturamento
-               </>
-             ) : processingStep === 'ready_for_excel' ? (
-               <>
-                 <RefreshCw className="w-4 h-4 mr-2" />
-                 Reprocessar
-               </>
-             ) : (
-               <>
-                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                 Processando...
-               </>
-             )}
-           </Button>
+          {/* Botões de Ação */}
+          <div className="flex flex-wrap gap-4">
+            <Button
+              onClick={startFaturamentoProcess}
+              disabled={processingStep !== 'idle' && processingStep !== 'ready_for_excel'}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {processingStep === 'idle' ? (
+                <>
+                  <Calculator className="w-4 h-4 mr-2" />
+                  Iniciar Processo de Faturamento
+                </>
+              ) : processingStep === 'ready_for_excel' ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Reprocessar
+                </>
+              ) : (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              )}
+            </Button>
 
-           {processingStep === 'ready_for_excel' && (
-             <Button
-               onClick={generateExcelTemplate}
-               disabled={isGeneratingExcel}
-               className="bg-green-600 hover:bg-green-700 text-white"
-             >
-               {isGeneratingExcel ? (
-                 <>
-                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                   Gerando Excel...
-                 </>
-               ) : (
-                 <>
-                   <Download className="w-4 h-4 mr-2" />
-                   Baixar Template Excel
-                 </>
-               )}
-             </Button>
-           )}
-         </div>
+            {processingStep === 'ready_for_excel' && (
+              <Button
+                onClick={generateExcelTemplate}
+                disabled={isGeneratingExcel}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                {isGeneratingExcel ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Gerando Excel...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Baixar Template Excel
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
 
-         {/* Alerta de Status */}
-         {processingStep === 'ready_for_excel' && (
-           <Alert className="bg-green-950/30 border-green-800">
-             <CheckCircle className="h-4 w-4 text-green-400" />
-             <AlertTitle className="text-green-400">Processo Concluído!</AlertTitle>
-             <AlertDescription className="text-gray-300">
-               Tabela de faturamento gerada com sucesso. Clique em "Baixar Template Excel" para fazer o download.
-             </AlertDescription>
-           </Alert>
-         )}
+          {/* Alerta de Status */}
+          {processingStep === 'ready_for_excel' && (
+            <Alert className="bg-green-950/30 border-green-800">
+              <CheckCircle className="h-4 w-4 text-green-400" />
+              <AlertTitle className="text-green-400">Processo Concluído!</AlertTitle>
+              <AlertDescription className="text-gray-300">
+                Tabela de faturamento gerada com sucesso. Clique em "Baixar Template Excel" para fazer o download.
+              </AlertDescription>
+            </Alert>
+          )}
 
-         {/* Informações do Processo */}
-         <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
-           <h4 className="text-white font-medium mb-2">Como Funciona o Processo:</h4>
-           <ol className="text-gray-300 space-y-1 text-sm">
-             <li>1. <strong>Análise de Médias:</strong> Verifica se todos os materiais da separação possuem médias cadastradas</li>
-             <li>2. <strong>Validação:</strong> Confirma que os dados estão corretos e completos</li>
-             <li>3. <strong>Geração da Tabela:</strong> Processa os dados da separação ativa</li>
-             <li>4. <strong>Template Excel:</strong> Gera arquivo Excel com todas as informações para faturamento</li>
-           </ol>
-         </div>
-       </CardContent>
-     </Card>
+          {/* Informações do Processo */}
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+            <h4 className="text-white font-medium mb-2">Como Funciona o Processo:</h4>
+            <ol className="text-gray-300 space-y-1 text-sm">
+              <li>1. <strong>Análise de Médias:</strong> Verifica se todos os materiais da separação possuem médias cadastradas</li>
+              <li>2. <strong>Validação:</strong> Confirma que os dados estão corretos e completos</li>
+              <li>3. <strong>Geração da Tabela:</strong> Processa os dados da separação ativa</li>
+              <li>4. <strong>Download Excel:</strong> Gera o template Excel para faturamento</li>
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
 
-     {/* Tabela de Resultados */}
-     {faturamentoData.length > 0 && (
-       <Card className="bg-gray-900/50 border-gray-800">
-         <CardHeader>
-           <CardTitle className="text-white apple-font flex items-center justify-between">
-             <span>Dados para Faturamento</span>
-             <Badge variant="outline" className="text-gray-300 border-gray-600">
-               {faturamentoData.length} itens
-             </Badge>
-           </CardTitle>
-         </CardHeader>
-         <CardContent className="p-0">
-           <div className="overflow-x-auto max-h-96">
-             <Table>
-               <TableHeader className="bg-gray-800/50 sticky top-0">
-                 <TableRow className="border-gray-700 hover:bg-gray-800/50">
-                   <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
-                     Loja
-                   </TableHead>
-                   <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
-                     Centro
-                   </TableHead>
-                   <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
-                     Material
-                   </TableHead>
-                   <TableHead className="text-gray-300 font-bold text-center">
-                     Quantidade
-                   </TableHead>
-                 </TableRow>
-               </TableHeader>
-               <TableBody>
-                 {faturamentoData.map((item, index) => (
-                   <TableRow key={index} className="border-gray-700 hover:bg-gray-800/30">
-                     <TableCell className="text-center text-gray-300 border-r border-gray-700">
-                       {item.loja}
-                     </TableCell>
-                     <TableCell className="text-center text-gray-300 border-r border-gray-700">
-                       {item.centro}
-                     </TableCell>
-                     <TableCell className="text-center text-yellow-400 font-mono border-r border-gray-700">
-                       {item.material}
-                     </TableCell>
-                     <TableCell className="text-center text-gray-300">
-                       {item.quantidade}
-                     </TableCell>
-                   </TableRow>
-                 ))}
-               </TableBody>
-             </Table>
-           </div>
-         </CardContent>
-       </Card>
-     )}
+      {/* Tabela de Dados (quando pronta) */}
+      {processingStep === 'ready_for_excel' && faturamentoData.length > 0 && (
+        <Card className="bg-gray-900/50 border-gray-800">
+          <CardHeader>
+            <CardTitle className="text-white apple-font flex items-center">
+              <CheckCircle className="w-5 h-5 mr-2 text-green-400" />
+              Tabela de Faturamento Gerada
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-gray-700">
+                    <TableHead className="text-center text-gray-300 font-bold border-r border-gray-700">
+                      Loja
+                    </TableHead>
+                    <TableHead className="text-center text-gray-300 font-bold border-r border-gray-700">
+                      Centro
+                    </TableHead>
+                    <TableHead className="text-center text-gray-300 font-bold border-r border-gray-700">
+                      Material
+                    </TableHead>
+                    <TableHead className="text-center text-gray-300 font-bold">
+                      Quantidade
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {faturamentoData.slice(0, 10).map((item, index) => (
+                    <TableRow key={index} className="border-gray-700">
+                      <TableCell className="text-center text-blue-400 font-mono border-r border-gray-700">
+                        {item.loja}
+                      </TableCell>
+                      <TableCell className="text-center text-green-400 font-mono border-r border-gray-700">
+                        {item.centro}
+                      </TableCell>
+                      <TableCell className="text-center text-yellow-400 font-mono border-r border-gray-700">
+                        {item.material}
+                      </TableCell>
+                      <TableCell className="text-center text-gray-300">
+                        {item.quantidade}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-     {/* Modais */}
-     <MediaErrorModal
-       isOpen={showErrorModal}
-       onClose={() => setShowErrorModal(false)}
-       errorItems={mediaStatus?.errorItems || []}
-       totalItems={mediaStatus?.totalItems || 0}
-       onNavigateToMedia={handleNavigateToMedia}
-       onProceedAnyway={handleProceedAnyway}
-     />
+      {/* Modais */}
+      <MediaErrorModal
+        isOpen={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        errorItems={mediaStatus?.errorItems || []}
+        totalItems={mediaStatus?.totalItems || 0}
+        onNavigateToMedia={handleNavigateToMedia}
+        onProceedAnyway={handleProceedAnyway}
+      />
 
-     <MissingMediaModal
-       isOpen={showMissingMediaModal}
-       onClose={() => setShowMissingMediaModal(false)}
-       missingItems={missingMediaItems}
-       onNavigateToMedia={handleNavigateToMedia}
-     />
-   </div>
- )
+      <MissingMediaModal
+        isOpen={showMissingMediaModal}
+        onClose={() => setShowMissingMediaModal(false)}
+        missingItems={missingMediaItems}
+        onNavigateToMedia={handleNavigateToMedia}
+      />
+    </div>
+  )
 }
