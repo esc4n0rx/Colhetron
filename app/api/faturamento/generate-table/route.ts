@@ -16,40 +16,47 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Buscar dados de faturamento com debug
-    const { items, debugInfo } = await getFaturamentoItems(decoded.userId)
+    // PRIMEIRO: Validar médias para TODOS os materiais da separação (independente do saldo)
+    const allMaterialCodes = await getAllMaterialCodesFromSeparation(decoded.userId)
     
-    // Validar se todos os materiais possuem médias
-    const materialCodes = [...new Set(items.map(item => item.material))]
-    const missingMediaValidation = await validateMediaExistence(decoded.userId, materialCodes)
+    if (allMaterialCodes.length === 0) {
+      return NextResponse.json({ 
+        error: 'Nenhuma separação ativa encontrada ou separação sem materiais.' 
+      }, { status: 404 })
+    }
+
+    // Validar se todos os materiais possuem médias (ANTES de filtrar por saldo)
+    const missingMediaValidation = await validateMediaExistence(decoded.userId, allMaterialCodes)
     
     if (missingMediaValidation.hasMissingMedia) {
       return NextResponse.json({ 
         error: 'Materiais sem média encontrados',
         missingMaterials: missingMediaValidation.missingMaterials,
-        details: missingMediaValidation.details,
-        debug: debugInfo
+        details: missingMediaValidation.details
       }, { status: 400 })
     }
 
     // Validar status das médias
-    const mediaStatusValidation = await validateMediaStatus(decoded.userId, materialCodes)
+    const mediaStatusValidation = await validateMediaStatus(decoded.userId, allMaterialCodes)
     
     if (mediaStatusValidation.hasErrors) {
       return NextResponse.json({ 
         error: 'Problemas encontrados na análise de médias',
         errorItems: mediaStatusValidation.errorItems,
-        totalItems: mediaStatusValidation.totalItems,
-        debug: debugInfo
+        totalItems: mediaStatusValidation.totalItems
       }, { status: 400 })
     }
+
+    // SEGUNDO: Buscar dados de faturamento (só materiais com saldo > 0)
+    const { items, debugInfo } = await getFaturamentoItems(decoded.userId)
 
     return NextResponse.json({ 
       items,
       summary: {
         totalItems: items.length,
-        uniqueMaterials: materialCodes.length,
-        uniqueStores: [...new Set(items.map(item => item.loja))].length
+        uniqueMaterials: [...new Set(items.map(item => item.material))].length,
+        uniqueStores: [...new Set(items.map(item => item.loja))].length,
+        totalMaterialsInSeparation: allMaterialCodes.length
       },
       debug: debugInfo
     })
@@ -58,6 +65,32 @@ export async function GET(request: NextRequest) {
     console.error('Erro ao gerar tabela de faturamento:', error)
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
   }
+}
+
+async function getAllMaterialCodesFromSeparation(userId: string): Promise<string[]> {
+  // Buscar separação ativa
+  const { data: activeSeparation, error: sepError } = await supabaseAdmin
+    .from('colhetron_separations')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .single()
+
+  if (sepError || !activeSeparation) {
+    return []
+  }
+
+  // Buscar TODOS os materiais da separação (independente do saldo)
+  const { data: separationItems, error: itemsError } = await supabaseAdmin
+    .from('colhetron_separation_items')
+    .select('material_code')
+    .eq('separation_id', activeSeparation.id)
+
+  if (itemsError || !separationItems) {
+    return []
+  }
+
+  return [...new Set(separationItems.map(item => item.material_code))]
 }
 
 async function getFaturamentoItems(userId: string) {
@@ -275,7 +308,7 @@ async function validateMediaStatus(userId: string, materialCodes: string[]) {
     .select('codigo, status, error')
     .eq('user_id', userId)
     .in('codigo', materialCodes)
-    .neq('status', 'completed')
+    .neq('status', 'OK')
 
   if (error) {
     throw new Error('Erro ao verificar status das médias')
