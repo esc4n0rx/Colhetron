@@ -17,12 +17,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Buscar dados de faturamento
-    const items = await getFaturamentoItems(decoded.userId)
+    // Buscar dados de faturamento com debug
+    const { items, debugInfo } = await getFaturamentoItems(decoded.userId)
     
     if (items.length === 0) {
       return NextResponse.json({ 
-        error: 'Nenhum item encontrado para faturamento. Verifique se há uma separação ativa com dados válidos.' 
+        error: 'Nenhum item encontrado para faturamento. Verifique se há uma separação ativa com dados válidos.',
+        debug: debugInfo
       }, { status: 404 })
     }
 
@@ -34,7 +35,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: mediaValidation.error,
         missingMaterials: mediaValidation.missingMaterials,
-        details: mediaValidation.details
+        details: mediaValidation.details,
+        debug: debugInfo
       }, { status: 400 })
     }
 
@@ -50,8 +52,8 @@ export async function POST(request: NextRequest) {
       bookType: 'xlsx' 
     })
 
-    // Log da operação
-    await logFaturamentoGeneration(decoded.userId, items.length, materialCodes.length)
+    // Log da operação com debug info
+    await logFaturamentoGeneration(decoded.userId, items.length, materialCodes.length, debugInfo)
 
     return new Response(excelBuffer, {
       headers: {
@@ -70,94 +72,189 @@ export async function POST(request: NextRequest) {
 }
 
 async function getFaturamentoItems(userId: string) {
-  const { data: activeSeparation, error: sepError } = await supabaseAdmin
-    .from('colhetron_separations')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .single()
-
-  if (sepError || !activeSeparation) {
-    throw new Error('Nenhuma separação ativa encontrada')
+  const debugInfo = {
+    totalQuantities: 0,
+    validQuantities: 0,
+    excludedQuantities: 0,
+    processedItems: 0,
+    skippedItems: 0,
+    expectedItems: 0,
+    finalItems: 0,
+    lojasWithoutCenter: [] as string[],
+    processingSteps: [] as string[]
   }
 
-  const { data: separationItems, error: itemsError } = await supabaseAdmin
-    .from('colhetron_separation_items')
-    .select('id, material_code, description')
-    .eq('separation_id', activeSeparation.id)
+  try {
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Iniciando processamento para usuário: ${userId}`)
+    
+    // Buscar separação ativa
+    const { data: activeSeparation, error: sepError } = await supabaseAdmin
+      .from('colhetron_separations')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .single()
 
-  if (itemsError || !separationItems) {
-    throw new Error('Erro ao buscar itens de separação')
-  }
-
-  const itemIds = separationItems.map(item => item.id)
-  
-  const { data: separationQuantities, error: quantitiesError } = await supabaseAdmin
-    .from('colhetron_separation_quantities')
-    .select('store_code, quantity, item_id')
-    .in('item_id', itemIds)
-    .gt('quantity', 0)
-
-  if (quantitiesError || !separationQuantities) {
-    throw new Error('Erro ao buscar dados de separação')
-  }
-
-  const itemToMaterialMap = new Map<string, { code: string; description: string }>()
-  separationItems.forEach(item => {
-    itemToMaterialMap.set(item.id, { 
-      code: item.material_code, 
-      description: item.description 
-    })
-  })
-
-  const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
-  
-  const { data: lojas, error: lojasError } = await supabaseAdmin
-    .from('colhetron_lojas')
-    .select('prefixo, centro')
-    .in('prefixo', uniqueStoreCodes)
-
-  if (lojasError) {
-    throw new Error('Erro ao buscar dados de lojas')
-  }
-
-  const storeToCenter = new Map<string, string>()
-  lojas?.forEach(loja => {
-    if (loja.centro) {
-      storeToCenter.set(loja.prefixo, loja.centro)
+    if (sepError || !activeSeparation) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Nenhuma separação ativa encontrada`)
+      throw new Error('Nenhuma separação ativa encontrada')
     }
-  })
 
-  const lojasWithoutCenter = uniqueStoreCodes.filter(store => !storeToCenter.has(store))
-  if (lojasWithoutCenter.length > 0) {
-    throw new Error(`Lojas sem centro definido: ${lojasWithoutCenter.join(', ')}`)
-  }
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Separação ativa encontrada: ${activeSeparation.id}`)
 
-  const faturamentoMap = new Map<string, any>()
+    // Buscar itens da separação
+    const { data: separationItems, error: itemsError } = await supabaseAdmin
+      .from('colhetron_separation_items')
+      .select('id, material_code, description')
+      .eq('separation_id', activeSeparation.id)
 
-  separationQuantities.forEach(sq => {
-    const materialInfo = itemToMaterialMap.get(sq.item_id)
-    const centro = storeToCenter.get(sq.store_code)
+    if (itemsError || !separationItems) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar itens de separação`)
+      throw new Error('Erro ao buscar itens de separação')
+    }
+
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Itens encontrados: ${separationItems.length}`)
+
+    const itemIds = separationItems.map(item => item.id)
     
-    if (!materialInfo || !centro) return
+    // Buscar TODAS as quantidades primeiro para debug
+    const { data: allQuantities, error: quantitiesError } = await supabaseAdmin
+      .from('colhetron_separation_quantities')
+      .select('store_code, quantity, item_id')
+      .in('item_id', itemIds)
 
-    const key = `${sq.store_code}-${materialInfo.code}`
+    if (quantitiesError || !allQuantities) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados de separação`)
+      throw new Error('Erro ao buscar dados de separação')
+    }
+
+    debugInfo.totalQuantities = allQuantities.length
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Total de registros de quantidade: ${allQuantities.length}`)
+
+    // Filtrar apenas quantidades > 0
+    const separationQuantities = allQuantities.filter(q => q.quantity > 0)
+    debugInfo.validQuantities = separationQuantities.length
+    debugInfo.excludedQuantities = allQuantities.length - separationQuantities.length
     
-    if (faturamentoMap.has(key)) {
-      const existing = faturamentoMap.get(key)!
-      existing.quantidade += sq.quantity
-    } else {
-      faturamentoMap.set(key, {
-        loja: sq.store_code,
-        centro: centro,
-        material: materialInfo.code,
-        description: materialInfo.description,
-        quantidade: sq.quantity
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Quantidades válidas (>0): ${separationQuantities.length}`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Quantidades excluídas (=0): ${debugInfo.excludedQuantities}`)
+
+    if (separationQuantities.length === 0) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Nenhuma quantidade válida encontrada`)
+      throw new Error('Nenhuma quantidade válida encontrada para faturamento')
+    }
+
+    // Mapear itens para códigos de material
+    const itemToMaterialMap = new Map<string, { code: string; description: string }>()
+    separationItems.forEach(item => {
+      itemToMaterialMap.set(item.id, { 
+        code: item.material_code, 
+        description: item.description 
       })
-    }
-  })
+    })
 
-  return Array.from(faturamentoMap.values())
+    // Buscar códigos únicos de loja
+    const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Lojas únicas encontradas: ${uniqueStoreCodes.length} - ${uniqueStoreCodes.join(', ')}`)
+    
+    const { data: lojas, error: lojasError } = await supabaseAdmin
+      .from('colhetron_lojas')
+      .select('prefixo, centro')
+      .in('prefixo', uniqueStoreCodes)
+
+    if (lojasError) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados de lojas`)
+      throw new Error('Erro ao buscar dados de lojas')
+    }
+
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Lojas encontradas no cadastro: ${lojas?.length || 0}`)
+
+    const storeToCenter = new Map<string, string>()
+    lojas?.forEach(loja => {
+      if (loja.centro) {
+        storeToCenter.set(loja.prefixo, loja.centro)
+      }
+    })
+
+    // Verificar lojas sem centro
+    const lojasWithoutCenter = uniqueStoreCodes.filter(store => !storeToCenter.has(store))
+    debugInfo.lojasWithoutCenter = lojasWithoutCenter
+    
+    if (lojasWithoutCenter.length > 0) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] AVISO: Lojas sem centro definido: ${lojasWithoutCenter.join(', ')}`)
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] Continuando processamento sem essas lojas`)
+    }
+
+    // Calcular itens esperados (para validação)
+    const expectedItemsSet = new Set<string>()
+    separationQuantities.forEach(sq => {
+      const materialInfo = itemToMaterialMap.get(sq.item_id)
+      const centro = storeToCenter.get(sq.store_code)
+      if (materialInfo && centro) {
+        expectedItemsSet.add(`${sq.store_code}-${materialInfo.code}`)
+      }
+    })
+    debugInfo.expectedItems = expectedItemsSet.size
+
+    const faturamentoMap = new Map<string, any>()
+
+    // Processar cada quantidade
+    separationQuantities.forEach(sq => {
+      const materialInfo = itemToMaterialMap.get(sq.item_id)
+      const centro = storeToCenter.get(sq.store_code)
+      
+      if (!materialInfo) {
+        debugInfo.processingSteps.push(`[${new Date().toISOString()}] AVISO: Material não encontrado para item_id: ${sq.item_id}`)
+        debugInfo.skippedItems++
+        return
+      }
+      
+      if (!centro) {
+        debugInfo.processingSteps.push(`[${new Date().toISOString()}] AVISO: Centro não encontrado para loja: ${sq.store_code}`)
+        debugInfo.skippedItems++
+        return
+      }
+
+      const key = `${sq.store_code}-${materialInfo.code}`
+      
+      if (faturamentoMap.has(key)) {
+        const existing = faturamentoMap.get(key)!
+        existing.quantidade += sq.quantity
+        debugInfo.processingSteps.push(`[${new Date().toISOString()}] Agregando quantidade ${sq.quantity} para ${key} (total: ${existing.quantidade})`)
+      } else {
+        faturamentoMap.set(key, {
+          loja: sq.store_code,
+          centro: centro,
+          material: materialInfo.code,
+          description: materialInfo.description,
+          quantidade: sq.quantity
+        })
+        debugInfo.processingSteps.push(`[${new Date().toISOString()}] Criando novo item ${key} com quantidade ${sq.quantity}`)
+      }
+      
+      debugInfo.processedItems++
+    })
+
+    debugInfo.finalItems = faturamentoMap.size
+    
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Processamento concluído:`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] - Itens processados: ${debugInfo.processedItems}`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] - Itens ignorados: ${debugInfo.skippedItems}`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] - Itens finais: ${debugInfo.finalItems}`)
+
+    // Validação final
+    if (debugInfo.finalItems < debugInfo.expectedItems) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Perda de dados detectada! Esperado ${debugInfo.expectedItems}, obtido ${debugInfo.finalItems}`)
+    }
+
+    const finalItems = Array.from(faturamentoMap.values())
+    
+    return { items: finalItems, debugInfo }
+
+  } catch (error) {
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO CRÍTICO: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+    throw error
+  }
 }
 
 async function validateAndGetMedias(userId: string, materialCodes: string[]) {
@@ -266,10 +363,19 @@ function createExcelWorkbook(data: any[]) {
   return workbook
 }
 
-async function logFaturamentoGeneration(userId: string, totalItems: number, totalMaterials: number) {
+async function logFaturamentoGeneration(userId: string, totalItems: number, totalMaterials: number, debugInfo: any) {
   try {
-    // Log simples da operação
-    console.log(`Faturamento gerado para usuário ${userId}: ${totalItems} itens, ${totalMaterials} materiais únicos`)
+    // Log detalhado da operação
+    console.log(`Faturamento gerado para usuário ${userId}:`)
+    console.log(`- Total de itens: ${totalItems}`)
+    console.log(`- Materiais únicos: ${totalMaterials}`)
+    console.log(`- Debug info:`, debugInfo)
+    
+    // Log dos passos de processamento
+    debugInfo.processingSteps.forEach((step: string) => {
+      console.log(step)
+    })
+    
   } catch (error) {
     console.error('Erro ao registrar log:', error)
   }

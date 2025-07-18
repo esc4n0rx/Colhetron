@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Buscar dados de faturamento
-    const items = await getFaturamentoItems(decoded.userId)
+    // Buscar dados de faturamento com debug
+    const { items, debugInfo } = await getFaturamentoItems(decoded.userId)
     
     // Validar se todos os materiais possuem médias
     const materialCodes = [...new Set(items.map(item => item.material))]
@@ -27,7 +27,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Materiais sem média encontrados',
         missingMaterials: missingMediaValidation.missingMaterials,
-        details: missingMediaValidation.details
+        details: missingMediaValidation.details,
+        debug: debugInfo
       }, { status: 400 })
     }
 
@@ -38,7 +39,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Problemas encontrados na análise de médias',
         errorItems: mediaStatusValidation.errorItems,
-        totalItems: mediaStatusValidation.totalItems
+        totalItems: mediaStatusValidation.totalItems,
+        debug: debugInfo
       }, { status: 400 })
     }
 
@@ -48,7 +50,8 @@ export async function GET(request: NextRequest) {
         totalItems: items.length,
         uniqueMaterials: materialCodes.length,
         uniqueStores: [...new Set(items.map(item => item.loja))].length
-      }
+      },
+      debug: debugInfo
     })
 
   } catch (error) {
@@ -58,97 +61,189 @@ export async function GET(request: NextRequest) {
 }
 
 async function getFaturamentoItems(userId: string) {
-  const { data: activeSeparation, error: sepError } = await supabaseAdmin
-    .from('colhetron_separations')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .single()
-
-  if (sepError || !activeSeparation) {
-    throw new Error('Nenhuma separação ativa encontrada')
+  const debugInfo = {
+    totalQuantities: 0,
+    validQuantities: 0,
+    excludedQuantities: 0,
+    processedItems: 0,
+    skippedItems: 0,
+    expectedItems: 0,
+    finalItems: 0,
+    lojasWithoutCenter: [] as string[],
+    processingSteps: [] as string[]
   }
 
-  const { data: separationItems, error: itemsError } = await supabaseAdmin
-    .from('colhetron_separation_items')
-    .select('id, material_code, description')
-    .eq('separation_id', activeSeparation.id)
+  try {
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Iniciando processamento para usuário: ${userId}`)
+    
+    // Buscar separação ativa
+    const { data: activeSeparation, error: sepError } = await supabaseAdmin
+      .from('colhetron_separations')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .single()
 
-  if (itemsError || !separationItems) {
-    throw new Error('Erro ao buscar itens de separação')
-  }
-
-  const itemIds = separationItems.map(item => item.id)
-  
-  const { data: separationQuantities, error: quantitiesError } = await supabaseAdmin
-    .from('colhetron_separation_quantities')
-    .select('store_code, quantity, item_id')
-    .in('item_id', itemIds)
-    .gt('quantity', 0)
-
-  if (quantitiesError || !separationQuantities) {
-    throw new Error('Erro ao buscar dados de separação')
-  }
-
-  // Mapear itens para códigos de material
-  const itemToMaterialMap = new Map<string, { code: string; description: string }>()
-  separationItems.forEach(item => {
-    itemToMaterialMap.set(item.id, { 
-      code: item.material_code, 
-      description: item.description 
-    })
-  })
-
-  // Buscar códigos únicos de loja
-  const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
-  
-  const { data: lojas, error: lojasError } = await supabaseAdmin
-    .from('colhetron_lojas')
-    .select('prefixo, centro')
-    .in('prefixo', uniqueStoreCodes)
-
-  if (lojasError) {
-    throw new Error('Erro ao buscar dados de lojas')
-  }
-
-  const storeToCenter = new Map<string, string>()
-  lojas?.forEach(loja => {
-    if (loja.centro) {
-      storeToCenter.set(loja.prefixo, loja.centro)
+    if (sepError || !activeSeparation) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Nenhuma separação ativa encontrada`)
+      throw new Error('Nenhuma separação ativa encontrada')
     }
-  })
 
-  // Verificar se todas as lojas têm centro definido
-  const lojasWithoutCenter = uniqueStoreCodes.filter(store => !storeToCenter.has(store))
-  if (lojasWithoutCenter.length > 0) {
-    throw new Error(`Lojas sem centro definido: ${lojasWithoutCenter.join(', ')}. Configure os centros no cadastro de lojas.`)
-  }
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Separação ativa encontrada: ${activeSeparation.id}`)
 
-  const faturamentoMap = new Map<string, any>()
+    // Buscar itens da separação
+    const { data: separationItems, error: itemsError } = await supabaseAdmin
+      .from('colhetron_separation_items')
+      .select('id, material_code, description')
+      .eq('separation_id', activeSeparation.id)
 
-  separationQuantities.forEach(sq => {
-    const materialInfo = itemToMaterialMap.get(sq.item_id)
-    const centro = storeToCenter.get(sq.store_code)
+    if (itemsError || !separationItems) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar itens de separação`)
+      throw new Error('Erro ao buscar itens de separação')
+    }
+
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Itens encontrados: ${separationItems.length}`)
+
+    const itemIds = separationItems.map(item => item.id)
     
-    if (!materialInfo || !centro) return
+    // Buscar TODAS as quantidades primeiro para debug
+    const { data: allQuantities, error: quantitiesError } = await supabaseAdmin
+      .from('colhetron_separation_quantities')
+      .select('store_code, quantity, item_id')
+      .in('item_id', itemIds)
 
-    const key = `${sq.store_code}-${materialInfo.code}`
+    if (quantitiesError || !allQuantities) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados de separação`)
+      throw new Error('Erro ao buscar dados de separação')
+    }
+
+    debugInfo.totalQuantities = allQuantities.length
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Total de registros de quantidade: ${allQuantities.length}`)
+
+    // Filtrar apenas quantidades > 0
+    const separationQuantities = allQuantities.filter(q => q.quantity > 0)
+    debugInfo.validQuantities = separationQuantities.length
+    debugInfo.excludedQuantities = allQuantities.length - separationQuantities.length
     
-    if (faturamentoMap.has(key)) {
-      const existing = faturamentoMap.get(key)!
-      existing.quantidade += sq.quantity
-    } else {
-      faturamentoMap.set(key, {
-        loja: sq.store_code,
-        centro: centro,
-        material: materialInfo.code,
-        description: materialInfo.description,
-        quantidade: sq.quantity
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Quantidades válidas (>0): ${separationQuantities.length}`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Quantidades excluídas (=0): ${debugInfo.excludedQuantities}`)
+
+    if (separationQuantities.length === 0) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Nenhuma quantidade válida encontrada`)
+      throw new Error('Nenhuma quantidade válida encontrada para faturamento')
+    }
+
+    // Mapear itens para códigos de material
+    const itemToMaterialMap = new Map<string, { code: string; description: string }>()
+    separationItems.forEach(item => {
+      itemToMaterialMap.set(item.id, { 
+        code: item.material_code, 
+        description: item.description 
       })
-    }
-  })
+    })
 
-  return Array.from(faturamentoMap.values())
+    // Buscar códigos únicos de loja
+    const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Lojas únicas encontradas: ${uniqueStoreCodes.length} - ${uniqueStoreCodes.join(', ')}`)
+    
+    const { data: lojas, error: lojasError } = await supabaseAdmin
+      .from('colhetron_lojas')
+      .select('prefixo, centro')
+      .in('prefixo', uniqueStoreCodes)
+
+    if (lojasError) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados de lojas`)
+      throw new Error('Erro ao buscar dados de lojas')
+    }
+
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Lojas encontradas no cadastro: ${lojas?.length || 0}`)
+
+    const storeToCenter = new Map<string, string>()
+    lojas?.forEach(loja => {
+      if (loja.centro) {
+        storeToCenter.set(loja.prefixo, loja.centro)
+      }
+    })
+
+    // Verificar lojas sem centro
+    const lojasWithoutCenter = uniqueStoreCodes.filter(store => !storeToCenter.has(store))
+    debugInfo.lojasWithoutCenter = lojasWithoutCenter
+    
+    if (lojasWithoutCenter.length > 0) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] AVISO: Lojas sem centro definido: ${lojasWithoutCenter.join(', ')}`)
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] Continuando processamento sem essas lojas`)
+    }
+
+    // Calcular itens esperados (para validação)
+    const expectedItemsSet = new Set<string>()
+    separationQuantities.forEach(sq => {
+      const materialInfo = itemToMaterialMap.get(sq.item_id)
+      const centro = storeToCenter.get(sq.store_code)
+      if (materialInfo && centro) {
+        expectedItemsSet.add(`${sq.store_code}-${materialInfo.code}`)
+      }
+    })
+    debugInfo.expectedItems = expectedItemsSet.size
+
+    const faturamentoMap = new Map<string, any>()
+
+    // Processar cada quantidade
+    separationQuantities.forEach(sq => {
+      const materialInfo = itemToMaterialMap.get(sq.item_id)
+      const centro = storeToCenter.get(sq.store_code)
+      
+      if (!materialInfo) {
+        debugInfo.processingSteps.push(`[${new Date().toISOString()}] AVISO: Material não encontrado para item_id: ${sq.item_id}`)
+        debugInfo.skippedItems++
+        return
+      }
+      
+      if (!centro) {
+        debugInfo.processingSteps.push(`[${new Date().toISOString()}] AVISO: Centro não encontrado para loja: ${sq.store_code}`)
+        debugInfo.skippedItems++
+        return
+      }
+
+      const key = `${sq.store_code}-${materialInfo.code}`
+      
+      if (faturamentoMap.has(key)) {
+        const existing = faturamentoMap.get(key)!
+        existing.quantidade += sq.quantity
+        debugInfo.processingSteps.push(`[${new Date().toISOString()}] Agregando quantidade ${sq.quantity} para ${key} (total: ${existing.quantidade})`)
+      } else {
+        faturamentoMap.set(key, {
+          loja: sq.store_code,
+          centro: centro,
+          material: materialInfo.code,
+          description: materialInfo.description,
+          quantidade: sq.quantity
+        })
+        debugInfo.processingSteps.push(`[${new Date().toISOString()}] Criando novo item ${key} com quantidade ${sq.quantity}`)
+      }
+      
+      debugInfo.processedItems++
+    })
+
+    debugInfo.finalItems = faturamentoMap.size
+    
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Processamento concluído:`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] - Itens processados: ${debugInfo.processedItems}`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] - Itens ignorados: ${debugInfo.skippedItems}`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] - Itens finais: ${debugInfo.finalItems}`)
+
+    // Validação final
+    if (debugInfo.finalItems < debugInfo.expectedItems) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Perda de dados detectada! Esperado ${debugInfo.expectedItems}, obtido ${debugInfo.finalItems}`)
+    }
+
+    const finalItems = Array.from(faturamentoMap.values())
+    
+    return { items: finalItems, debugInfo }
+
+  } catch (error) {
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO CRÍTICO: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+    throw error
+  }
 }
 
 async function validateMediaExistence(userId: string, materialCodes: string[]) {
@@ -169,44 +264,34 @@ async function validateMediaExistence(userId: string, materialCodes: string[]) {
     hasMissingMedia: missingMaterials.length > 0,
     missingMaterials,
     details: missingMaterials.length > 0 ? 
-      `Materiais sem média: ${missingMaterials.join(', ')}` : 
-      'Todos os materiais possuem médias cadastradas'
+      `Execute a análise de médias para os seguintes materiais: ${missingMaterials.join(', ')}` : 
+      'Todas as médias estão disponíveis'
   }
 }
 
 async function validateMediaStatus(userId: string, materialCodes: string[]) {
-  const { data: mediaItems, error } = await supabaseAdmin
+  const { data: mediaStatus, error } = await supabaseAdmin
     .from('colhetron_media_analysis')
-    .select('id, codigo, material, status')
+    .select('codigo, status, error')
     .eq('user_id', userId)
     .in('codigo', materialCodes)
+    .neq('status', 'completed')
 
   if (error) {
     throw new Error('Erro ao verificar status das médias')
   }
 
-  const errorItems = mediaItems?.filter(item => item.status !== 'OK') || []
+  const errorItems = mediaStatus?.map(item => ({
+    id: item.codigo,
+    codigo: item.codigo,
+    material: item.codigo,
+    status: item.status,
+    error: item.error || 'Status não concluído'
+  })) || []
 
   return {
     hasErrors: errorItems.length > 0,
-    errorItems: errorItems.map(item => ({
-      id: item.id,
-      codigo: item.codigo,
-      material: item.material,
-      status: item.status,
-      error: getErrorMessage(item.status)
-    })),
-    totalItems: mediaItems?.length || 0
-  }
-}
-
-function getErrorMessage(status: string): string {
-  switch (status) {
-    case 'ATENÇÃO':
-      return 'Diferença significativa entre estoque e quantidade prevista'
-    case 'CRÍTICO':
-      return 'Problema crítico: estoque zerado ou grande discrepância'
-    default:
-      return 'Status não identificado'
+    errorItems,
+    totalItems: materialCodes.length
   }
 }

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { AlertTriangle, ExternalLink, AlertCircle, XCircle } from 'lucide-react'
 import { useState } from 'react'
+import type { MediaAnalysisStatus } from '../tabs/FaturamentoTab'
 
 interface MediaErrorItem {
   id: string
@@ -20,23 +21,24 @@ interface MediaErrorItem {
 interface MediaErrorModalProps {
   isOpen: boolean
   onClose: () => void
-  errorItems: MediaErrorItem[]
-  totalItems: number
-  onNavigateToMedia: () => void
   onProceedAnyway: () => void
+  onNavigateToMedia: () => void
+  mediaStatus: MediaAnalysisStatus // <--- adicione esta linha
 }
 
 export default function MediaErrorModal({ 
   isOpen, 
   onClose, 
-  errorItems, 
-  totalItems,
   onNavigateToMedia,
-  onProceedAnyway
+  onProceedAnyway,
+  mediaStatus
 }: MediaErrorModalProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   
+  const errorItems = mediaStatus.errorItems
+  const totalItems = mediaStatus.totalItems
+
   const paginatedItems = errorItems.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
