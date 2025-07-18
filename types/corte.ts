@@ -58,6 +58,7 @@ export interface ProductData {
    */
   export interface CutRequest {
     material_code: string
+    description?: string // Novo campo opcional para descrição
     cut_type: CutType
     stores?: SpecificStoreCut[]
     partial_cuts?: PartialStoreCut[]

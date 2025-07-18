@@ -1,23 +1,7 @@
+// app/api/faturamento/generate-table/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
-
-interface FaturamentoItem {
-  loja: string
-  centro: string
-  material: string
-  quantidade: number
-}
-
-interface SeparationQuantityWithItem {
-  store_code: string
-  quantity: number
-  colhetron_separation_items: {
-    id: string
-    material_code: string
-    separation_id: string
-  }
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,118 +16,197 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    const { data: activeSeparation, error: sepError } = await supabaseAdmin
-      .from('colhetron_separations')
-      .select('id')
-      .eq('user_id', decoded.userId)
-      .eq('status', 'active')
-      .single()
-
-    if (sepError || !activeSeparation) {
-      return NextResponse.json({ 
-        error: 'Nenhuma separação ativa encontrada' 
-      }, { status: 404 })
-    }
-
-    const { data: separationItems, error: itemsError } = await supabaseAdmin
-      .from('colhetron_separation_items')
-      .select('id, material_code')
-      .eq('separation_id', activeSeparation.id)
-
-    if (itemsError || !separationItems) {
-      console.error('Erro ao buscar itens de separação:', itemsError)
-      return NextResponse.json({ error: 'Erro ao buscar itens de separação' }, { status: 500 })
-    }
-
-    const itemIds = separationItems.map(item => item.id)
+    // Buscar dados de faturamento
+    const items = await getFaturamentoItems(decoded.userId)
     
-    const { data: separationQuantities, error: quantitiesError } = await supabaseAdmin
-      .from('colhetron_separation_quantities')
-      .select('store_code, quantity, item_id')
-      .in('item_id', itemIds)
-      .gt('quantity', 0)
-
-    if (quantitiesError) {
-      console.error('Erro ao buscar quantidades de separação:', quantitiesError)
-      return NextResponse.json({ error: 'Erro ao buscar dados de separação' }, { status: 500 })
-    }
-
-    if (!separationQuantities || separationQuantities.length === 0) {
-      return NextResponse.json({ 
-        error: 'Nenhuma quantidade de separação encontrada' 
-      }, { status: 404 })
-    }
-
-    const itemToMaterialMap = new Map<string, string>()
-    separationItems.forEach(item => {
-      itemToMaterialMap.set(item.id, item.material_code)
-    })
-
-    const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
+    // Validar se todos os materiais possuem médias
+    const materialCodes = [...new Set(items.map(item => item.material))]
+    const missingMediaValidation = await validateMediaExistence(decoded.userId, materialCodes)
     
-    const { data: lojas, error: lojasError } = await supabaseAdmin
-    .from('colhetron_lojas')
-    .select('prefixo, centro')
-    .in('prefixo', uniqueStoreCodes)
-
-    if (lojasError) {
-      console.error('Erro ao buscar lojas:', lojasError)
-      return NextResponse.json({ error: 'Erro ao buscar dados de lojas' }, { status: 500 })
-    }
-
-    const storeToCenter = new Map<string, string>()
-    lojas?.forEach(loja => {
-      if (loja.centro) {
-        storeToCenter.set(loja.prefixo, loja.centro)
-      }
-    })
-
-    const lojasWithoutCenter = uniqueStoreCodes.filter(store => !storeToCenter.has(store))
-    if (lojasWithoutCenter.length > 0) {
+    if (missingMediaValidation.hasMissingMedia) {
       return NextResponse.json({ 
-        error: `As seguintes lojas não têm centro definido: ${lojasWithoutCenter.join(', ')}. Configure os centros na aba de cadastro de lojas.` 
+        error: 'Materiais sem média encontrados',
+        missingMaterials: missingMediaValidation.missingMaterials,
+        details: missingMediaValidation.details
       }, { status: 400 })
     }
 
-    const faturamentoMap = new Map<string, FaturamentoItem>()
-
-    separationQuantities.forEach(sq => {
-      const materialCode = itemToMaterialMap.get(sq.item_id)
-      const centro = storeToCenter.get(sq.store_code)
-      
-      if (!materialCode || !centro) return
-
-      const key = `${sq.store_code}-${materialCode}`
-      
-      if (faturamentoMap.has(key)) {
-        const existing = faturamentoMap.get(key)!
-        existing.quantidade += sq.quantity
-      } else {
-        faturamentoMap.set(key, {
-          loja: sq.store_code,
-          centro: centro,
-          material: materialCode,
-          quantidade: sq.quantity
-        })
-      }
-    })
-
-    const items = Array.from(faturamentoMap.values())
-      .sort((a, b) => {
-        if (a.loja !== b.loja) return a.loja.localeCompare(b.loja)
-        return a.material.localeCompare(b.material)
-      })
-
-    if (items.length === 0) {
+    // Validar status das médias
+    const mediaStatusValidation = await validateMediaStatus(decoded.userId, materialCodes)
+    
+    if (mediaStatusValidation.hasErrors) {
       return NextResponse.json({ 
-        error: 'Nenhum item válido encontrado para faturamento. Verifique se as lojas têm centros definidos.' 
-      }, { status: 404 })
+        error: 'Problemas encontrados na análise de médias',
+        errorItems: mediaStatusValidation.errorItems,
+        totalItems: mediaStatusValidation.totalItems
+      }, { status: 400 })
     }
 
-    return NextResponse.json({ items })
+    return NextResponse.json({ 
+      items,
+      summary: {
+        totalItems: items.length,
+        uniqueMaterials: materialCodes.length,
+        uniqueStores: [...new Set(items.map(item => item.loja))].length
+      }
+    })
 
   } catch (error) {
     console.error('Erro ao gerar tabela de faturamento:', error)
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
+  }
+}
+
+async function getFaturamentoItems(userId: string) {
+  const { data: activeSeparation, error: sepError } = await supabaseAdmin
+    .from('colhetron_separations')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .single()
+
+  if (sepError || !activeSeparation) {
+    throw new Error('Nenhuma separação ativa encontrada')
+  }
+
+  const { data: separationItems, error: itemsError } = await supabaseAdmin
+    .from('colhetron_separation_items')
+    .select('id, material_code, description')
+    .eq('separation_id', activeSeparation.id)
+
+  if (itemsError || !separationItems) {
+    throw new Error('Erro ao buscar itens de separação')
+  }
+
+  const itemIds = separationItems.map(item => item.id)
+  
+  const { data: separationQuantities, error: quantitiesError } = await supabaseAdmin
+    .from('colhetron_separation_quantities')
+    .select('store_code, quantity, item_id')
+    .in('item_id', itemIds)
+    .gt('quantity', 0)
+
+  if (quantitiesError || !separationQuantities) {
+    throw new Error('Erro ao buscar dados de separação')
+  }
+
+  // Mapear itens para códigos de material
+  const itemToMaterialMap = new Map<string, { code: string; description: string }>()
+  separationItems.forEach(item => {
+    itemToMaterialMap.set(item.id, { 
+      code: item.material_code, 
+      description: item.description 
+    })
+  })
+
+  // Buscar códigos únicos de loja
+  const uniqueStoreCodes = [...new Set(separationQuantities.map(sq => sq.store_code))]
+  
+  const { data: lojas, error: lojasError } = await supabaseAdmin
+    .from('colhetron_lojas')
+    .select('prefixo, centro')
+    .in('prefixo', uniqueStoreCodes)
+
+  if (lojasError) {
+    throw new Error('Erro ao buscar dados de lojas')
+  }
+
+  const storeToCenter = new Map<string, string>()
+  lojas?.forEach(loja => {
+    if (loja.centro) {
+      storeToCenter.set(loja.prefixo, loja.centro)
+    }
+  })
+
+  // Verificar se todas as lojas têm centro definido
+  const lojasWithoutCenter = uniqueStoreCodes.filter(store => !storeToCenter.has(store))
+  if (lojasWithoutCenter.length > 0) {
+    throw new Error(`Lojas sem centro definido: ${lojasWithoutCenter.join(', ')}. Configure os centros no cadastro de lojas.`)
+  }
+
+  const faturamentoMap = new Map<string, any>()
+
+  separationQuantities.forEach(sq => {
+    const materialInfo = itemToMaterialMap.get(sq.item_id)
+    const centro = storeToCenter.get(sq.store_code)
+    
+    if (!materialInfo || !centro) return
+
+    const key = `${sq.store_code}-${materialInfo.code}`
+    
+    if (faturamentoMap.has(key)) {
+      const existing = faturamentoMap.get(key)!
+      existing.quantidade += sq.quantity
+    } else {
+      faturamentoMap.set(key, {
+        loja: sq.store_code,
+        centro: centro,
+        material: materialInfo.code,
+        description: materialInfo.description,
+        quantidade: sq.quantity
+      })
+    }
+  })
+
+  return Array.from(faturamentoMap.values())
+}
+
+async function validateMediaExistence(userId: string, materialCodes: string[]) {
+  const { data: existingMedia, error } = await supabaseAdmin
+    .from('colhetron_media_analysis')
+    .select('codigo')
+    .eq('user_id', userId)
+    .in('codigo', materialCodes)
+
+  if (error) {
+    throw new Error('Erro ao verificar médias existentes')
+  }
+
+  const existingCodes = new Set(existingMedia?.map(item => item.codigo) || [])
+  const missingMaterials = materialCodes.filter(code => !existingCodes.has(code))
+
+  return {
+    hasMissingMedia: missingMaterials.length > 0,
+    missingMaterials,
+    details: missingMaterials.length > 0 ? 
+      `Materiais sem média: ${missingMaterials.join(', ')}` : 
+      'Todos os materiais possuem médias cadastradas'
+  }
+}
+
+async function validateMediaStatus(userId: string, materialCodes: string[]) {
+  const { data: mediaItems, error } = await supabaseAdmin
+    .from('colhetron_media_analysis')
+    .select('id, codigo, material, status')
+    .eq('user_id', userId)
+    .in('codigo', materialCodes)
+
+  if (error) {
+    throw new Error('Erro ao verificar status das médias')
+  }
+
+  const errorItems = mediaItems?.filter(item => item.status !== 'OK') || []
+
+  return {
+    hasErrors: errorItems.length > 0,
+    errorItems: errorItems.map(item => ({
+      id: item.id,
+      codigo: item.codigo,
+      material: item.material,
+      status: item.status,
+      error: getErrorMessage(item.status)
+    })),
+    totalItems: mediaItems?.length || 0
+  }
+}
+
+function getErrorMessage(status: string): string {
+  switch (status) {
+    case 'ATENÇÃO':
+      return 'Diferença significativa entre estoque e quantidade prevista'
+    case 'CRÍTICO':
+      return 'Problema crítico: estoque zerado ou grande discrepância'
+    default:
+      return 'Status não identificado'
   }
 }

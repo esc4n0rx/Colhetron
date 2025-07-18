@@ -2,30 +2,34 @@
 "use client"
 
 import { useState, useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { 
   Search, 
   Package, 
   Scissors, 
   Store, 
   AlertTriangle, 
-  Check, 
-  X, 
   ChevronDown,
   ChevronUp,
-  Loader2,
-  Info
+  Loader2
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from '@/components/ui/alert-dialog'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { useCorteData } from '@/hooks/useCorteData'
 import { CutModalProps, ProductData, StoreInfo, CutType } from '@/types/corte'
@@ -35,7 +39,6 @@ export default function CorteModal({ isOpen, onClose, onCutExecuted }: CutModalP
     modalState,
     setModalState,
     searchProducts,
-    getProductDetails,
     executeCut,
     getStoreInfo,
     resetModal
@@ -44,8 +47,9 @@ export default function CorteModal({ isOpen, onClose, onCutExecuted }: CutModalP
   const [storeInfo, setStoreInfo] = useState<StoreInfo[]>([])
   const [showMoreStores, setShowMoreStores] = useState(false)
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
 
-  const initialStoresDisplay = 8
+  const initialStoresDisplay = 6 // Reduzido para melhor visualização
 
   // Carregar informações das lojas ao abrir modal
   useEffect(() => {
@@ -88,75 +92,58 @@ export default function CorteModal({ isOpen, onClose, onCutExecuted }: CutModalP
     return showMoreStores ? stores : stores.slice(0, initialStoresDisplay)
   }, [modalState.selectedProduct, showMoreStores])
 
-  // Estatísticas do produto selecionado
-  const productStats = useMemo(() => {
-    if (!modalState.selectedProduct) return null
-
-    const totalStores = modalState.selectedProduct.stores.length
-    const storesWithQuantity = modalState.selectedProduct.stores.filter(s => s.quantity > 0).length
-
-    return {
-      totalStores,
-      storesWithQuantity,
-      totalDistributed: modalState.selectedProduct.total_distributed
-    }
-  }, [modalState.selectedProduct])
-
-  // Calcular estatísticas de corte
+  // Estatísticas do corte
   const cutStats = useMemo(() => {
     if (!modalState.selectedProduct) return null
 
-    let affectedStores = 0
+    const { stores } = modalState.selectedProduct
     let totalCutQuantity = 0
+    let affectedStores = 0
 
     if (modalState.cutType === 'all') {
-      affectedStores = modalState.selectedProduct.stores.filter(s => s.quantity > 0).length
-      totalCutQuantity = modalState.selectedProduct.total_distributed
+      totalCutQuantity = stores.reduce((sum, store) => sum + store.quantity, 0)
+      affectedStores = stores.length
     } else if (modalState.cutType === 'specific') {
-      affectedStores = modalState.selectedStores.size
-      totalCutQuantity = modalState.selectedProduct.stores
-        .filter(s => modalState.selectedStores.has(s.store_code))
-        .reduce((sum, s) => sum + s.quantity, 0)
+      stores.forEach(store => {
+        if (modalState.selectedStores.has(store.store_code)) {
+          totalCutQuantity += store.quantity
+          affectedStores++
+        }
+      })
     } else if (modalState.cutType === 'partial') {
-      affectedStores = modalState.partialCuts.size
-      totalCutQuantity = Array.from(modalState.partialCuts.values())
-        .reduce((sum, qty) => sum + qty, 0)
+      modalState.partialCuts.forEach((quantity, storeCode) => {
+        totalCutQuantity += quantity
+        affectedStores++
+      })
     }
 
     return {
-      affectedStores,
       totalCutQuantity,
+      affectedStores,
+      totalStores: stores.length,
       remainingQuantity: modalState.selectedProduct.total_distributed - totalCutQuantity
     }
-  }, [modalState])
+  }, [modalState.selectedProduct, modalState.cutType, modalState.selectedStores, modalState.partialCuts])
 
-  const handleProductSelect = async (product: ProductData) => {
+  const handleProductSelect = (product: ProductData) => {
     setModalState({ 
       selectedProduct: product,
-      searchQuery: product.material_code,
-      searchResults: []
-    })
-  }
-
-  const handleCutTypeChange = (cutType: CutType) => {
-    setModalState({ 
-      cutType,
       selectedStores: new Set(),
       partialCuts: new Map()
     })
   }
 
-  const handleStoreToggle = (storeCode: string, checked: boolean) => {
+  const handleStoreToggle = (storeCode: string) => {
     const newSelected = new Set(modalState.selectedStores)
-    if (checked) {
-      newSelected.add(storeCode)
-    } else {
+    if (newSelected.has(storeCode)) {
       newSelected.delete(storeCode)
+    } else {
+      newSelected.add(storeCode)
     }
     setModalState({ selectedStores: newSelected })
   }
 
-  const handlePartialCutChange = (storeCode: string, quantity: number) => {
+  const handlePartialQuantityChange = (storeCode: string, quantity: number) => {
     const newPartialCuts = new Map(modalState.partialCuts)
     if (quantity > 0) {
       newPartialCuts.set(storeCode, quantity)
@@ -166,7 +153,7 @@ export default function CorteModal({ isOpen, onClose, onCutExecuted }: CutModalP
     setModalState({ partialCuts: newPartialCuts })
   }
 
-  const handleExecuteCut = async () => {
+  const handleCutClick = () => {
     if (!modalState.selectedProduct || !cutStats) return
 
     // Validações
@@ -180,16 +167,20 @@ export default function CorteModal({ isOpen, onClose, onCutExecuted }: CutModalP
       return
     }
 
-    // Confirmar ação
-    const confirmMessage = `Deseja realmente cortar ${cutStats.totalCutQuantity} unidade(s) de ${cutStats.affectedStores} loja(s) do produto ${modalState.selectedProduct.material_code}?`
-    
-    if (!confirm(confirmMessage)) return
+    // Abrir modal de confirmação
+    setShowConfirmDialog(true)
+  }
+
+  const handleConfirmCut = async () => {
+    if (!modalState.selectedProduct || !cutStats) return
 
     setModalState({ isLoading: true })
+    setShowConfirmDialog(false)
 
     try {
       let cutRequest: any = {
         material_code: modalState.selectedProduct.material_code,
+        description: modalState.selectedProduct.description,
         cut_type: modalState.cutType
       }
 
@@ -223,315 +214,365 @@ export default function CorteModal({ isOpen, onClose, onCutExecuted }: CutModalP
 
   const getStoreDisplayName = (storeCode: string) => {
     const store = storeInfo.find(s => s.prefixo === storeCode)
-    return store ? `${storeCode} - ${store.nome}` : storeCode
+    return store ? `${store.prefixo} - ${store.nome}` : storeCode
   }
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border-gray-700 text-white w-full max-w-4xl h-[95vh] p-0 overflow-hidden flex flex-col">
-        {/* Header fixo */}
-        <DialogHeader className="p-6 pb-4 border-b border-gray-700 flex-shrink-0">
-          <DialogTitle className="flex items-center text-xl">
-            <Scissors className="w-6 h-6 mr-3 text-red-400" />
-            Corte de Produtos
-          </DialogTitle>
-          <DialogDescription className="text-gray-400">
-            Selecione um produto e configure as opções de corte
-          </DialogDescription>
-        </DialogHeader>
+  if (!isOpen) return null
 
-        {/* Conteúdo com scroll */}
-        <div className="flex-1 overflow-hidden">
-          <ScrollArea className="h-full px-6 py-4">
-            <div className="space-y-6 pr-4">
-              {/* Busca de Produto */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Buscar Produto</Label>
+  return (
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-7xl w-full max-h-[95vh] p-0 gap-0">
+          {/* Header */}
+          <DialogHeader className="p-6 pb-4 border-b">
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Scissors className="h-6 w-6 text-primary" />
+              Corte de Produto
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              Busque e selecione um produto para executar o corte nas lojas desejadas
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Content */}
+          <div className="flex h-[calc(95vh-200px)]">
+            {/* Search Section - Melhor largura */}
+            <div className="w-96 border-r flex flex-col">
+              <div className="p-4 border-b">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Digite o código ou descrição do produto..."
+                    placeholder="Buscar por código ou descrição..."
                     value={modalState.searchQuery}
                     onChange={(e) => setModalState({ searchQuery: e.target.value })}
-                    className="pl-10 bg-gray-800 border-gray-700 text-white"
+                    className="pl-10"
                   />
-                  {modalState.isLoading && (
-                    <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-blue-400" />
-                  )}
                 </div>
-
-                {/* Resultados da Busca */}
-                <AnimatePresence>
-                  {modalState.searchResults.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="bg-gray-800 border border-gray-700 rounded-lg max-h-40 overflow-y-auto"
-                    >
-                      {modalState.searchResults.map((product, index) => (
-                        <div
-                          key={product.id}
-                          onClick={() => handleProductSelect(product)}
-                          className="p-3 hover:bg-gray-700 cursor-pointer border-b border-gray-700 last:border-b-0"
-                        >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <p className="text-sm font-medium">{product.material_code}</p>
-                              <p className="text-xs text-gray-400 truncate max-w-xs">{product.description}</p>
-                            </div>
-                            <Badge variant="outline" className="text-xs">
-                              {product.total_distributed} unidades
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
 
-              {/* Produto Selecionado */}
-              {modalState.selectedProduct && productStats && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <Card className="bg-gray-800 border-gray-700">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center text-lg">
-                        <Package className="w-5 h-5 mr-2 text-blue-400" />
-                        Produto Selecionado
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div>
-                        <p className="text-lg font-semibold">{modalState.selectedProduct.material_code}</p>
-                        <p className="text-sm text-gray-400 break-words">{modalState.selectedProduct.description}</p>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-                        <div className="bg-gray-700 rounded-lg p-3">
-                          <p className="text-2xl font-bold text-blue-400">{productStats.totalDistributed}</p>
-                          <p className="text-xs text-gray-400">Total Distribuído</p>
+              {/* Search Results - Melhor espaçamento */}
+              <div className="flex-1 overflow-hidden">
+                {modalState.searchQuery.length >= 2 ? (
+                  <ScrollArea className="h-full">
+                    <div className="p-4 space-y-3">
+                      {modalState.isLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                          <span className="ml-2">Buscando produtos...</span>
                         </div>
-                        <div className="bg-gray-700 rounded-lg p-3">
-                          <p className="text-2xl font-bold text-green-400">{productStats.storesWithQuantity}</p>
-                          <p className="text-xs text-gray-400">Lojas com Estoque</p>
-                        </div>
-                        <div className="bg-gray-700 rounded-lg p-3">
-                          <p className="text-2xl font-bold text-purple-400">{productStats.totalStores}</p>
-                          <p className="text-xs text-gray-400">Total de Lojas</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Opções de Corte */}
-                  <Tabs value={modalState.cutType} onValueChange={(value) => handleCutTypeChange(value as CutType)}>
-                    <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 bg-gray-800 h-auto">
-                      <TabsTrigger value="all" className="data-[state=active]:bg-red-600 py-3">
-                        Cortar Tudo
-                      </TabsTrigger>
-                      <TabsTrigger value="specific" className="data-[state=active]:bg-orange-600 py-3">
-                        Lojas Específicas
-                      </TabsTrigger>
-                      <TabsTrigger value="partial" className="data-[state=active]:bg-yellow-600 py-3">
-                        Corte Parcial
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="all" className="space-y-3 mt-4">
-                      <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-                        <div className="flex items-start space-x-3">
-                          <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="font-medium text-red-400">Atenção: Corte Total</p>
-                            <p className="text-sm text-gray-400">
-                              Todas as quantidades deste produto serão removidas de todas as lojas
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value="specific" className="space-y-3 mt-4">
-                      <div className="bg-gray-800 border border-gray-700 rounded-lg">
-                        <div className="p-4 border-b border-gray-700">
-                          <h4 className="font-medium flex items-center">
-                            <Store className="w-4 h-4 mr-2" />
-                            Selecionar Lojas para Corte
-                          </h4>
-                          <p className="text-sm text-gray-400 mt-1">
-                            Escolha as lojas que terão o produto cortado completamente
-                          </p>
-                        </div>
-                        
-                        <div className="max-h-80 overflow-y-auto">
-                          <div className="p-4 space-y-2">
-                            {displayedStores.map((store) => (
-                              <div key={store.store_code} className="flex items-center justify-between p-2 hover:bg-gray-700 rounded">
-                                <div className="flex items-center space-x-3 flex-1 min-w-0">
-                                  <Checkbox
-                                    checked={modalState.selectedStores.has(store.store_code)}
-                                    onCheckedChange={(checked) => handleStoreToggle(store.store_code, checked as boolean)}
-                                  />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium truncate">{getStoreDisplayName(store.store_code)}</p>
-                                    <p className="text-xs text-gray-400">Quantidade: {store.quantity}</p>
-                                  </div>
-                                </div>
-                                <Badge variant={store.quantity > 0 ? "default" : "secondary"} className="ml-2 flex-shrink-0">
-                                  {store.quantity}
+                      ) : modalState.searchResults.length > 0 ? (
+                        modalState.searchResults.map((product) => (
+                          <motion.div
+                            key={product.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
+                              modalState.selectedProduct?.id === product.id 
+                                ? 'border-primary bg-primary/10' 
+                                : 'hover:border-muted-foreground/50'
+                            }`}
+                            onClick={() => handleProductSelect(product)}
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="font-semibold text-lg">{product.material_code}</p>
+                                <Badge variant="outline">
+                                  {product.total_distributed} un
                                 </Badge>
                               </div>
-                            ))}
-                            
-                            {modalState.selectedProduct.stores.length > initialStoresDisplay && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setShowMoreStores(!showMoreStores)}
-                                className="w-full mt-2"
-                              >
-                                {showMoreStores ? (
-                                  <>
-                                    <ChevronUp className="w-4 h-4 mr-2" />
-                                    Mostrar Menos
-                                  </>
-                                ) : (
-                                  <>
-                                    <ChevronDown className="w-4 h-4 mr-2" />
-                                    Mostrar Mais ({modalState.selectedProduct.stores.length - initialStoresDisplay} restantes)
-                                  </>
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {product.description}
+                              </p>
+                              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                <span>{product.stores.length} lojas</span>
+                                {modalState.selectedProduct?.id === product.id && (
+                                  <Badge variant="default" className="text-xs">
+                                    Selecionado
+                                  </Badge>
                                 )}
-                              </Button>
-                            )}
-                          </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p>Nenhum produto encontrado</p>
                         </div>
-                      </div>
-                    </TabsContent>
+                      )}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <div className="text-center">
+                      <Search className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>Digite pelo menos 2 caracteres para buscar</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
 
-                    <TabsContent value="partial" className="space-y-3 mt-4">
-                      <div className="bg-gray-800 border border-gray-700 rounded-lg">
-                        <div className="p-4 border-b border-gray-700">
-                          <h4 className="font-medium flex items-center">
-                            <Info className="w-4 h-4 mr-2" />
-                            Definir Quantidades para Corte
-                          </h4>
-                          <p className="text-sm text-gray-400 mt-1">
-                            Especifique a quantidade a ser cortada de cada loja
-                          </p>
-                        </div>
-                        
-                        <div className="max-h-80 overflow-y-auto">
-                          <div className="p-4 space-y-3">
-                            {displayedStores.filter(store => store.quantity > 0).map((store) => (
-                              <div key={store.store_code} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate">{getStoreDisplayName(store.store_code)}</p>
-                                  <p className="text-xs text-gray-400">Disponível: {store.quantity}</p>
+            {/* Product Details Section */}
+            <div className="flex-1 flex flex-col">
+              {modalState.selectedProduct ? (
+                <>
+                  {/* Product Info - Melhor espaçamento */}
+                  <div className="p-6 border-b">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-2xl font-bold">{modalState.selectedProduct.material_code}</h3>
+                      <div className="flex gap-2">
+                        <Badge variant="secondary" className="text-base px-3 py-1">
+                          {modalState.selectedProduct.total_distributed} unidades
+                        </Badge>
+                        <Badge variant="outline" className="text-base px-3 py-1">
+                          {modalState.selectedProduct.stores.length} lojas
+                        </Badge>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground text-lg">{modalState.selectedProduct.description}</p>
+                  </div>
+
+                  {/* Cut Options - Melhor layout */}
+                  <div className="p-6 border-b">
+                    <h4 className="text-lg font-semibold mb-4">Tipo de Corte</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      {[
+                        { value: 'all', label: 'Cortar Tudo', desc: 'Remove o produto de todas as lojas' },
+                        { value: 'specific', label: 'Lojas Específicas', desc: 'Remove apenas das lojas selecionadas' },
+                        { value: 'partial', label: 'Corte Parcial', desc: 'Define quantidade específica por loja' }
+                      ].map((option) => (
+                        <Label key={option.value} className="cursor-pointer">
+                          <div className={`p-4 border rounded-lg transition-all hover:shadow-sm ${
+                            modalState.cutType === option.value 
+                              ? 'border-primary bg-primary/10' 
+                              : 'hover:border-muted-foreground/50'
+                          }`}>
+                            <div className="flex items-center space-x-2 mb-2">
+                              <input
+                                type="radio"
+                                name="cutType"
+                                value={option.value}
+                                checked={modalState.cutType === option.value}
+                                onChange={(e) => setModalState({ cutType: e.target.value as CutType })}
+                                className="text-primary"
+                              />
+                              <span className="font-medium">{option.label}</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {option.desc}
+                            </p>
+                          </div>
+                        </Label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Store Selection - Melhor altura */}
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="p-6 pb-4 border-b">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-lg font-semibold">
+                          {modalState.cutType === 'specific' ? 'Selecionar Lojas' : 
+                           modalState.cutType === 'partial' ? 'Quantidades por Loja' : 
+                           'Distribuição por Loja'}
+                        </h4>
+                        {modalState.selectedProduct.stores.length > initialStoresDisplay && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowMoreStores(!showMoreStores)}
+                          >
+                            {showMoreStores ? (
+                              <>
+                                <ChevronUp className="h-4 w-4 mr-1" />
+                                Mostrar Menos
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-4 w-4 mr-1" />
+                                Mostrar Mais (+{modalState.selectedProduct.stores.length - initialStoresDisplay})
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stores List - Melhor espaçamento */}
+                    <div className="flex-1 overflow-hidden">
+                      <ScrollArea className="h-full">
+                        <div className="p-6 pt-2 space-y-3">
+                          {displayedStores.map((store) => (
+                            <div key={store.store_code} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                              <div className="flex items-center space-x-3">
+                                {modalState.cutType === 'specific' && (
+                                  <Checkbox
+                                    checked={modalState.selectedStores.has(store.store_code)}
+                                    onCheckedChange={() => handleStoreToggle(store.store_code)}
+                                  />
+                                )}
+                                <div className="flex items-center space-x-2">
+                                  <Store className="h-4 w-4 text-muted-foreground" />
+                                  <div>
+                                    <p className="font-medium">{getStoreDisplayName(store.store_code)}</p>
+                                    <p className="text-sm text-muted-foreground">
+                                      Disponível: {store.quantity} unidades
+                                    </p>
+                                  </div>
                                 </div>
-                                <div className="flex items-center space-x-2 flex-shrink-0">
+                              </div>
+                              
+                              <div className="flex items-center space-x-2">
+                                {modalState.cutType === 'partial' && (
                                   <Input
                                     type="number"
                                     min="0"
                                     max={store.quantity}
-                                    value={modalState.partialCuts.get(store.store_code) || ''}
-                                    onChange={(e) => handlePartialCutChange(store.store_code, parseInt(e.target.value) || 0)}
-                                    className="w-20 h-8 text-center bg-gray-800 border-gray-600"
                                     placeholder="0"
+                                    value={modalState.partialCuts.get(store.store_code) || ''}
+                                    onChange={(e) => handlePartialQuantityChange(store.store_code, parseInt(e.target.value) || 0)}
+                                    className="w-24 text-center"
                                   />
-                                  <span className="text-xs text-gray-400">/ {store.quantity}</span>
-                                </div>
-                              </div>
-                            ))}
-                            
-                            {modalState.selectedProduct.stores.length > initialStoresDisplay && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setShowMoreStores(!showMoreStores)}
-                                className="w-full mt-2"
-                              >
-                                {showMoreStores ? (
-                                  <>
-                                    <ChevronUp className="w-4 h-4 mr-2" />
-                                    Mostrar Menos
-                                  </>
-                                ) : (
-                                  <>
-                                    <ChevronDown className="w-4 h-4 mr-2" />
-                                    Mostrar Mais
-                                  </>
                                 )}
-                              </Button>
-                            )}
+                                <Badge variant="outline" className="text-sm">
+                                  {store.quantity} un
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  </div>
+
+                  {/* Cut Summary - Melhor visualização */}
+                  {cutStats && cutStats.totalCutQuantity > 0 && (
+                    <div className="p-6 border-t">
+                      <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <AlertTriangle className="h-5 w-5 text-destructive" />
+                          <h5 className="font-semibold text-destructive">Resumo do Corte</h5>
+                        </div>
+                        <div className="grid grid-cols-4 gap-4 text-sm">
+                          <div className="text-center">
+                            <p className="text-muted-foreground">Unidades a Cortar</p>
+                            <p className="text-xl font-bold text-destructive">{cutStats.totalCutQuantity}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-muted-foreground">Lojas Afetadas</p>
+                            <p className="text-xl font-bold text-destructive">{cutStats.affectedStores}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-muted-foreground">Permanecerá</p>
+                            <p className="text-xl font-bold text-primary">{cutStats.remainingQuantity}</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-muted-foreground">Total de Lojas</p>
+                            <p className="text-xl font-bold">{cutStats.totalStores}</p>
                           </div>
                         </div>
                       </div>
-                    </TabsContent>
-                  </Tabs>
-
-                  {/* Resumo do Corte */}
-                  {cutStats && cutStats.totalCutQuantity > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4"
-                    >
-                      <h4 className="font-medium text-yellow-400 mb-3">Resumo do Corte</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-                        <div>
-                          <p className="text-lg font-bold text-red-400">{cutStats.affectedStores}</p>
-                          <p className="text-xs text-gray-400">Lojas Afetadas</p>
-                        </div>
-                        <div>
-                          <p className="text-lg font-bold text-red-400">{cutStats.totalCutQuantity}</p>
-                          <p className="text-xs text-gray-400">Unidades Cortadas</p>
-                        </div>
-                        <div>
-                          <p className="text-lg font-bold text-green-400">{cutStats.remainingQuantity}</p>
-                          <p className="text-xs text-gray-400">Unidades Restantes</p>
-                        </div>
-                      </div>
-                    </motion.div>
+                    </div>
                   )}
-                </motion.div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <Package className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+                    <p className="text-xl font-medium text-muted-foreground">
+                      Selecione um produto para continuar
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Use a busca ao lado para encontrar o produto desejado
+                    </p>
+                  </div>
+                </div>
               )}
             </div>
-          </ScrollArea>
-        </div>
+          </div>
 
-        {/* Footer fixo com ações */}
-        {modalState.selectedProduct && (
-          <div className="p-6 pt-4 border-t border-gray-700 flex-shrink-0">
-            <div className="flex flex-col sm:flex-row justify-end gap-3">
-              <Button variant="outline" onClick={onClose} disabled={modalState.isLoading} className="order-2 sm:order-1">
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleExecuteCut}
-                disabled={modalState.isLoading || !cutStats || cutStats.totalCutQuantity === 0}
-                className="bg-red-600 hover:bg-red-700 order-1 sm:order-2"
+          {/* Footer */}
+          <div className="p-6 border-t flex justify-between items-center">
+            <Button variant="outline" onClick={onClose} disabled={modalState.isLoading}>
+              Cancelar
+            </Button>
+            
+            {modalState.selectedProduct && cutStats && cutStats.totalCutQuantity > 0 && (
+              <Button 
+                onClick={handleCutClick}
+                disabled={modalState.isLoading}
+                className="bg-destructive hover:bg-destructive/90"
               >
                 {modalState.isLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Executando...
                   </>
                 ) : (
                   <>
-                    <Scissors className="w-4 h-4 mr-2" />
+                    <Scissors className="h-4 w-4 mr-2" />
                     Executar Corte
                   </>
                 )}
               </Button>
-            </div>
+            )}
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Confirmar Corte de Produto
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {modalState.selectedProduct && cutStats && (
+                <div className="space-y-3">
+                  <p>Você está prestes a executar o corte com as seguintes configurações:</p>
+                  <div className="bg-muted p-3 rounded-lg space-y-2">
+                    <div className="flex justify-between">
+                      <span className="font-medium">Produto:</span>
+                      <span>{modalState.selectedProduct.material_code}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Tipo de Corte:</span>
+                      <span className="capitalize">
+                        {modalState.cutType === 'all' ? 'Cortar Tudo' : 
+                         modalState.cutType === 'specific' ? 'Lojas Específicas' : 
+                         'Corte Parcial'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Unidades a Cortar:</span>
+                      <span className="text-destructive font-bold">{cutStats.totalCutQuantity}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-medium">Lojas Afetadas:</span>
+                      <span className="text-destructive font-bold">{cutStats.affectedStores}</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Atenção:</strong> Esta ação não pode ser desfeita.
+                  </p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmCut}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Confirmar Corte
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }

@@ -1,3 +1,4 @@
+// components/tabs/FaturamentoTab.tsx
 "use client"
 
 import React, { useState } from 'react'
@@ -5,10 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Loader2, AlertTriangle, Download, XCircle } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Loader2, AlertTriangle, Download, CheckCircle, RefreshCw, Calculator } from 'lucide-react'
 import { toast } from 'sonner'
+import MissingMediaModal from '@/components/modals/MissingMediaModal'
+import MediaErrorModal from '@/components/modals/MediaErrorModal'
 
 interface MediaAnalysisStatus {
   totalItems: number
@@ -29,26 +31,61 @@ interface FaturamentoItem {
   quantidade: number
 }
 
-export function FaturamentoTab() {
-  const [isLoading, setIsLoading] = useState(false)
-  const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false)
-  
-  // Modal de erros de status (CRÍTICO/ATENÇÃO)
-  const [showErrorModal, setShowErrorModal] = useState(false)
-  const [mediaStatus, setMediaStatus] = useState<MediaAnalysisStatus | null>(null)
-  
-  // State e Modal para o erro de médias não encontradas
-  const [showMissingMediaModal, setShowMissingMediaModal] = useState(false)
-  const [missingMediaError, setMissingMediaError] = useState<string | null>(null)
+interface MissingMediaItem {
+  material: string
+  description?: string
+  quantidade: number
+  lojas: string[]
+}
 
-  const [faturamentoData, setFaturamentoData] = useState<FaturamentoItem[]>([])
-  const [currentPage, setCurrentPage] = useState(1)
+type ProcessingStep = 'idle' | 'analyzing' | 'validating' | 'generating_table' | 'ready_for_excel'
+
+export default function FaturamentoTab() {
+  const [processingStep, setProcessingStep] = useState<ProcessingStep>('idle')
+  const [isGeneratingExcel, setIsGeneratingExcel] = useState(false)
   
-  const itemsPerPage = 10
+  // Estados para modais
+  const [showErrorModal, setShowErrorModal] = useState(false)
+  const [showMissingMediaModal, setShowMissingMediaModal] = useState(false)
+  
+  // Estados para dados
+  const [mediaStatus, setMediaStatus] = useState<MediaAnalysisStatus | null>(null)
+  const [missingMediaItems, setMissingMediaItems] = useState<MissingMediaItem[]>([])
+  const [faturamentoData, setFaturamentoData] = useState<FaturamentoItem[]>([])
+  
+  // Reset completo do estado
+  const resetState = () => {
+    setProcessingStep('idle')
+    setMediaStatus(null)
+    setMissingMediaItems([])
+    setFaturamentoData([])
+    setShowErrorModal(false)
+    setShowMissingMediaModal(false)
+  }
+
+  // Função principal que orquestra todo o processo
+  const startFaturamentoProcess = async () => {
+    resetState()
+    setProcessingStep('analyzing')
+    
+    try {
+      // Etapa 1: Análise de Status das Médias
+      const mediaStatusResult = await checkMediaAnalysisStatus()
+      if (!mediaStatusResult) return
+      
+      setProcessingStep('validating')
+      
+      // Etapa 2: Validação e Geração da Tabela
+      await generateFaturamentoTable()
+      
+    } catch (error) {
+      console.error('Erro no processo de faturamento:', error)
+      toast.error('Erro no processo de faturamento')
+      setProcessingStep('idle')
+    }
+  }
 
   const checkMediaAnalysisStatus = async () => {
-    setIsLoading(true)
-    setFaturamentoData([]) // Limpa dados antigos ao iniciar nova análise
     try {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
@@ -65,17 +102,19 @@ export function FaturamentoTab() {
       const data = await response.json()
       setMediaStatus(data)
 
+      // Se há erros, mostrar modal e parar o processo
       if (data.itemsWithError > 0) {
-        setCurrentPage(1); // Reseta a paginação ao abrir o modal
         setShowErrorModal(true)
-      } else {
-        await generateFaturamentoTable()
+        setProcessingStep('idle')
+        return false
       }
+
+      return true
     } catch (error) {
       console.error('Erro ao verificar status:', error)
-      toast.error(error instanceof Error ? error.message : 'Erro desconhecido')
-    } finally {
-      setIsLoading(false)
+      toast.error(error instanceof Error ? error.message : 'Erro ao verificar status das médias')
+      setProcessingStep('idle')
+      return false
     }
   }
 
@@ -83,6 +122,8 @@ export function FaturamentoTab() {
     try {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
+
+      setProcessingStep('generating_table')
 
       const response = await fetch('/api/faturamento/generate-table', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -95,15 +136,18 @@ export function FaturamentoTab() {
 
       const data = await response.json()
       setFaturamentoData(data.items)
-      toast.success('Tabela de faturamento gerada com sucesso! Agora você pode gerar o template Excel.')
+      setProcessingStep('ready_for_excel')
+      
+      toast.success(`Tabela gerada com sucesso! ${data.items.length} itens processados.`)
     } catch (error) {
       console.error('Erro ao gerar tabela:', error)
       toast.error(error instanceof Error ? error.message : 'Erro ao gerar tabela')
+      setProcessingStep('idle')
     }
   }
 
   const generateExcelTemplate = async () => {
-    setIsGeneratingTemplate(true)
+    setIsGeneratingExcel(true)
     try {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
@@ -115,15 +159,31 @@ export function FaturamentoTab() {
 
       if (!response.ok) {
         const errorData = await response.json()
+        
+        // Tratar erro específico de médias não encontradas
         if (response.status === 400 && errorData.error?.includes('Médias não encontradas')) {
-            setMissingMediaError(errorData.error)
+          // Extrair lista de materiais do erro
+          const errorMessage = errorData.error
+          const materialsMatch = errorMessage.match(/: (.+)\. Execute/)
+          
+          if (materialsMatch) {
+            const materials = materialsMatch[1].split(', ')
+            const missingItems: MissingMediaItem[] = materials.map((material: string) => ({
+              material: material.trim(),
+              quantidade: 0, // Será preenchido pela API posteriormente
+              lojas: [] // Será preenchido pela API posteriormente
+            }))
+            
+            setMissingMediaItems(missingItems)
             setShowMissingMediaModal(true)
+          }
         } else {
-            toast.error(errorData.error || 'Erro ao gerar template Excel')
+          toast.error(errorData.error || 'Erro ao gerar template Excel')
         }
         return
       }
 
+      // Download do arquivo Excel
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -137,241 +197,220 @@ export function FaturamentoTab() {
       toast.success('Template Excel gerado e baixado com sucesso!')
     } catch (error) {
       console.error('Erro ao gerar Excel:', error)
-      toast.error(error instanceof Error ? error.message : 'Erro ao gerar template')
+      toast.error(error instanceof Error ? error.message : 'Erro ao gerar template Excel')
     } finally {
-      setIsGeneratingTemplate(false)
+      setIsGeneratingExcel(false)
     }
   }
 
-  const paginatedErrorItems = mediaStatus?.errorItems.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  ) || []
+  const handleProceedAnyway = () => {
+    setShowErrorModal(false)
+    generateFaturamentoTable()
+  }
 
-  const totalPages = Math.ceil((mediaStatus?.errorItems.length || 0) / itemsPerPage)
+  const handleNavigateToMedia = () => {
+    setShowErrorModal(false)
+    setShowMissingMediaModal(false)
+    toast.info('Navegue até a aba "Análise de Médias" para corrigir as pendências.')
+  }
+
+  const getProcessingStepText = () => {
+    switch (processingStep) {
+      case 'analyzing':
+        return 'Analisando médias do sistema...'
+      case 'validating':
+        return 'Validando dados...'
+      case 'generating_table':
+        return 'Gerando tabela de faturamento...'
+      case 'ready_for_excel':
+        return 'Pronto para gerar Excel!'
+      default:
+        return 'Clique para iniciar o processo'
+    }
+  }
+
+  const getProcessingProgress = () => {
+    switch (processingStep) {
+      case 'analyzing':
+        return 25
+      case 'validating':
+        return 50
+      case 'generating_table':
+        return 75
+      case 'ready_for_excel':
+        return 100
+      default:
+        return 0
+    }
+  }
 
   return (
     <div className="space-y-6">
+      {/* Card Principal */}
       <Card className="bg-gray-900/50 border-gray-800">
         <CardHeader>
           <CardTitle className="text-white apple-font flex items-center">
-            <Download className="w-5 h-5 mr-2" />
-            Faturamento
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-4">
-            <Button
-              onClick={checkMediaAnalysisStatus}
-              disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Analisando...
-                </>
-              ) : (
-                'Analisar e Gerar Tabela'
-              )}
-            </Button>
+            <Calculator className="w-5 h-5 mr-2" />
+            Faturamento - Geração de Template Excel
+         </CardTitle>
+       </CardHeader>
+       <CardContent className="space-y-4">
+         {/* Indicador de Progresso */}
+         {processingStep !== 'idle' && (
+           <div className="space-y-2">
+             <div className="flex items-center justify-between text-sm">
+               <span className="text-gray-300">{getProcessingStepText()}</span>
+               <span className="text-gray-400">{getProcessingProgress()}%</span>
+             </div>
+             <div className="w-full bg-gray-700 rounded-full h-2">
+               <div 
+                 className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                 style={{ width: `${getProcessingProgress()}%` }}
+               />
+             </div>
+           </div>
+         )}
 
-            {faturamentoData.length > 0 && (
-              <Button
-                onClick={generateExcelTemplate}
-                disabled={isGeneratingTemplate}
-                className="bg-green-600 hover:bg-green-700 text-white"
-              >
-                {isGeneratingTemplate ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Gerando Template...
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4 mr-2" />
-                    Gerar Template Excel
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+         {/* Botões de Ação */}
+         <div className="flex flex-wrap gap-4">
+           <Button
+             onClick={startFaturamentoProcess}
+             disabled={processingStep !== 'idle' && processingStep !== 'ready_for_excel'}
+             className="bg-blue-600 hover:bg-blue-700 text-white"
+           >
+             {processingStep === 'idle' ? (
+               <>
+                 <Calculator className="w-4 h-4 mr-2" />
+                 Iniciar Processo de Faturamento
+               </>
+             ) : processingStep === 'ready_for_excel' ? (
+               <>
+                 <RefreshCw className="w-4 h-4 mr-2" />
+                 Reprocessar
+               </>
+             ) : (
+               <>
+                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                 Processando...
+               </>
+             )}
+           </Button>
 
-      {faturamentoData.length > 0 && (
-        <Card className="bg-gray-900/50 border-gray-800">
-          <CardHeader>
-            <CardTitle className="text-white apple-font">
-              Dados para Faturamento ({faturamentoData.length} itens)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-gray-700 bg-gray-800/50 hover:bg-gray-800/50">
-                    <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
-                      COD_LOJA_SAP
-                    </TableHead>
-                    <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
-                      COD_PRODUTO
-                    </TableHead>
-                    <TableHead className="text-gray-300 font-bold text-center">
-                      Quant. Volumes
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {faturamentoData.map((item, index) => (
-                    <TableRow key={`${item.centro}-${item.material}-${index}`} className="border-gray-700 hover:bg-gray-700/50">
-                      <TableCell className="text-gray-300 text-center border-r border-gray-700">
-                        {item.centro}
-                      </TableCell>
-                      <TableCell className="text-gray-300 text-center border-r border-gray-700">
-                        {item.material}
-                      </TableCell>
-                      <TableCell className="text-gray-300 text-center">
-                        {item.quantidade}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+           {processingStep === 'ready_for_excel' && (
+             <Button
+               onClick={generateExcelTemplate}
+               disabled={isGeneratingExcel}
+               className="bg-green-600 hover:bg-green-700 text-white"
+             >
+               {isGeneratingExcel ? (
+                 <>
+                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                   Gerando Excel...
+                 </>
+               ) : (
+                 <>
+                   <Download className="w-4 h-4 mr-2" />
+                   Baixar Template Excel
+                 </>
+               )}
+             </Button>
+           )}
+         </div>
 
-      <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-4xl max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-red-400">
-              <XCircle className="w-5 h-5 mr-2" />
-              Itens com Status Incorreto ({mediaStatus?.itemsWithError} de {mediaStatus?.totalItems})
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 flex-grow overflow-y-auto">
-            <p className="text-gray-300">
-              Os seguintes itens não estão com status "OK" na análise de médias.
-              Por favor, ajuste-os antes de continuar:
-            </p>
-            <ScrollArea className="h-96 border border-gray-700 rounded">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-gray-700 sticky top-0 bg-gray-900">
-                    <TableHead className="text-gray-300">Código</TableHead>
-                    <TableHead className="text-gray-300">Material</TableHead>
-                    <TableHead className="text-gray-300">Status</TableHead>
-                    <TableHead className="text-gray-300">Erro</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedErrorItems.map((item) => (
-                    <TableRow key={item.id} className="border-gray-700">
-                      <TableCell className="text-gray-300 font-mono">{item.codigo}</TableCell>
-                      <TableCell className="text-gray-300">{item.material}</TableCell>
-                      <TableCell>
-                        <Badge variant={item.status === 'CRÍTICO' ? 'destructive' : 'secondary'}>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-yellow-400">{item.error}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </div>
-          <div className="pt-4 space-y-4">
-            {totalPages > 1 && (
-              <div className="flex justify-center items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  className="border-gray-600 text-gray-300"
-                >
-                  Anterior
-                </Button>
-                <span className="px-3 py-1 text-sm text-gray-300">
-                  Página {currentPage} de {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                  className="border-gray-600 text-gray-300"
-                >
-                  Próximo
-                </Button>
-              </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowErrorModal(false)}
-                className="border-gray-600 text-gray-300"
-              >
-                Fechar
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowErrorModal(false)
-                  toast.info('Acesse a aba "Análise de Médias" para corrigir os itens')
-                }}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                Ir para Análise de Médias
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
-      <Dialog open={showMissingMediaModal} onOpenChange={setShowMissingMediaModal}>
-        <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-yellow-400">
-              <AlertTriangle className="w-5 h-5 mr-2" />
-              Pendência na Análise de Médias
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-gray-300">
-                Não foi possível gerar o template porque um ou mais materiais estão sem a média do sistema definida.
-            </p>
-            <div className="bg-gray-800 p-4 rounded-md border border-gray-700 max-h-60 overflow-y-auto">
-                <p className="text-sm font-mono text-white whitespace-pre-wrap">
-                    {missingMediaError}
-                </p>
-            </div>
-            <p className="text-gray-300">
-                Por favor, acesse a aba "Análise de Médias" para cadastrar as médias dos itens listados acima.
-            </p>
-            <div className="flex justify-end gap-2 pt-4">
-                <Button
-                    variant="outline"
-                    onClick={() => setShowMissingMediaModal(false)}
-                    className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-gray-200"
-                >
-                    Fechar
-                </Button>
-                <Button
-                    onClick={() => {
-                        setShowMissingMediaModal(false);
-                        toast.info('Navegue até a aba "Análise de Médias" para corrigir as pendências.');
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700"
-                >
-                    Entendido
-                </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
+         {/* Alerta de Status */}
+         {processingStep === 'ready_for_excel' && (
+           <Alert className="bg-green-950/30 border-green-800">
+             <CheckCircle className="h-4 w-4 text-green-400" />
+             <AlertTitle className="text-green-400">Processo Concluído!</AlertTitle>
+             <AlertDescription className="text-gray-300">
+               Tabela de faturamento gerada com sucesso. Clique em "Baixar Template Excel" para fazer o download.
+             </AlertDescription>
+           </Alert>
+         )}
+
+         {/* Informações do Processo */}
+         <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+           <h4 className="text-white font-medium mb-2">Como Funciona o Processo:</h4>
+           <ol className="text-gray-300 space-y-1 text-sm">
+             <li>1. <strong>Análise de Médias:</strong> Verifica se todos os materiais da separação possuem médias cadastradas</li>
+             <li>2. <strong>Validação:</strong> Confirma que os dados estão corretos e completos</li>
+             <li>3. <strong>Geração da Tabela:</strong> Processa os dados da separação ativa</li>
+             <li>4. <strong>Template Excel:</strong> Gera arquivo Excel com todas as informações para faturamento</li>
+           </ol>
+         </div>
+       </CardContent>
+     </Card>
+
+     {/* Tabela de Resultados */}
+     {faturamentoData.length > 0 && (
+       <Card className="bg-gray-900/50 border-gray-800">
+         <CardHeader>
+           <CardTitle className="text-white apple-font flex items-center justify-between">
+             <span>Dados para Faturamento</span>
+             <Badge variant="outline" className="text-gray-300 border-gray-600">
+               {faturamentoData.length} itens
+             </Badge>
+           </CardTitle>
+         </CardHeader>
+         <CardContent className="p-0">
+           <div className="overflow-x-auto max-h-96">
+             <Table>
+               <TableHeader className="bg-gray-800/50 sticky top-0">
+                 <TableRow className="border-gray-700 hover:bg-gray-800/50">
+                   <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
+                     Loja
+                   </TableHead>
+                   <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
+                     Centro
+                   </TableHead>
+                   <TableHead className="text-gray-300 font-bold text-center border-r border-gray-700">
+                     Material
+                   </TableHead>
+                   <TableHead className="text-gray-300 font-bold text-center">
+                     Quantidade
+                   </TableHead>
+                 </TableRow>
+               </TableHeader>
+               <TableBody>
+                 {faturamentoData.map((item, index) => (
+                   <TableRow key={index} className="border-gray-700 hover:bg-gray-800/30">
+                     <TableCell className="text-center text-gray-300 border-r border-gray-700">
+                       {item.loja}
+                     </TableCell>
+                     <TableCell className="text-center text-gray-300 border-r border-gray-700">
+                       {item.centro}
+                     </TableCell>
+                     <TableCell className="text-center text-yellow-400 font-mono border-r border-gray-700">
+                       {item.material}
+                     </TableCell>
+                     <TableCell className="text-center text-gray-300">
+                       {item.quantidade}
+                     </TableCell>
+                   </TableRow>
+                 ))}
+               </TableBody>
+             </Table>
+           </div>
+         </CardContent>
+       </Card>
+     )}
+
+     {/* Modais */}
+     <MediaErrorModal
+       isOpen={showErrorModal}
+       onClose={() => setShowErrorModal(false)}
+       errorItems={mediaStatus?.errorItems || []}
+       totalItems={mediaStatus?.totalItems || 0}
+       onNavigateToMedia={handleNavigateToMedia}
+       onProceedAnyway={handleProceedAnyway}
+     />
+
+     <MissingMediaModal
+       isOpen={showMissingMediaModal}
+       onClose={() => setShowMissingMediaModal(false)}
+       missingItems={missingMediaItems}
+       onNavigateToMedia={handleNavigateToMedia}
+     />
+   </div>
+ )
 }

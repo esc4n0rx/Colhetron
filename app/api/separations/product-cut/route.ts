@@ -17,6 +17,7 @@ const partialStoreCutSchema = z.object({
 
 const cutRequestSchema = z.object({
   material_code: z.string().min(1, 'Código do material é obrigatório'),
+  description: z.string().optional(), // Novo campo para descrição
   cut_type: z.enum(['all', 'specific', 'partial']),
   stores: z.array(specificStoreCutSchema).optional(),
   partial_cuts: z.array(partialStoreCutSchema).optional()
@@ -46,7 +47,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = cutRequestSchema.parse(body)
 
-
     const { data: activeSeparation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id, type, date, file_name')
@@ -60,12 +60,19 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    const { data: separationItem, error: itemError } = await supabaseAdmin
+    // Construir a query de busca do item com material_code e description
+    let itemQuery = supabaseAdmin
       .from('colhetron_separation_items')
       .select('id, description, row_number, type_separation')
       .eq('separation_id', activeSeparation.id)
       .eq('material_code', validatedData.material_code)
-      .single()
+
+    // Se a description foi fornecida, adicionar à query para maior precisão
+    if (validatedData.description) {
+      itemQuery = itemQuery.eq('description', validatedData.description)
+    }
+
+    const { data: separationItem, error: itemError } = await itemQuery.single()
 
     if (itemError || !separationItem) {
       return NextResponse.json({ 
@@ -144,7 +151,6 @@ export async function POST(request: NextRequest) {
       })
 
     } else if (validatedData.cut_type === 'partial') {
-
       if (!validatedData.partial_cuts || validatedData.partial_cuts.length === 0) {
         return NextResponse.json({ 
           error: 'Nenhuma quantidade especificada para corte parcial' 

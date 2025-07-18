@@ -69,10 +69,15 @@ export default function PreSeparacaoTab() {
     return { ...zoneTotals, totalGeral: grandTotal } as { [key: string]: number };
   }, [filteredData, zones]);
 
-  // useCallback para a função de impressão.
+  // useCallback para a função de impressão com sistema de paginação otimizado.
   // Ela não será recriada a cada render, a não ser que suas dependências mudem.
   const handlePrint = useCallback(() => {
     if (filteredData.length === 0) return; // Se não tem nada pra imprimir, a gente nem se mexe.
+
+    // ***** AJUSTE: LIMITADOR DE 18 ITENS POR PÁGINA *****
+    // Calculando quantas linhas cabem por página - otimizado para economizar folhas
+    const itemsPerPage = 18; // Ajustado para melhor aproveitamento das folhas
+    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
 
     // Montando um HTMLzão na mão pra ter controle total sobre o layout da impressão.
     // É uma abordagem "old school", mas funciona muito bem pra relatórios simples.
@@ -105,14 +110,29 @@ export default function PreSeparacaoTab() {
           .header-datetime {
             text-align: right; font-size: 9pt;
           }
+          .page-info {
+            text-align: center; font-size: 8pt; margin: 0.5rem 0;
+          }
+          .page-container {
+            break-after: page;
+          }
+          .page-container:last-child {
+            break-after: avoid;
+          }
           table {
             width: 100%; border-collapse: collapse; margin-top: 1rem;
           }
           th, td {
-            border: 1px solid #ddd; padding: 6px; text-align: left;
+            border: 1px solid #333; /* Bordas mais visíveis */
+            padding: 6px; 
+            text-align: left;
           }
           th {
-            background-color: #f2f2f2; font-weight: bold;
+            background-color: #000 !important; /* Fundo preto */
+            color: #fff !important; /* Texto branco */
+            font-weight: bold;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           tbody tr:nth-child(even) {
             background-color: #f9f9f9;
@@ -122,44 +142,72 @@ export default function PreSeparacaoTab() {
           }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
+          
+          /* Garantir que o cabeçalho se repita em cada página */
+          thead {
+            display: table-header-group;
+          }
         }
       </style>
     `;
 
-    // Como `filteredData` já está ordenado e sem os itens zerados, a impressão vai sair certinha.
-    const tableHeader = `
-      <thead>
-        <tr>
-          <th>TIPO SEPARAÇÃO</th>
-          <th>MATERIAL SEPARAÇÃO</th>
-          ${zones.map(zone => `<th class="text-center">${zone}</th>`).join('')}
-          <th class="text-center">Total Geral</th>
-        </tr>
-      </thead>
-    `;
+    // Dividindo os dados em páginas com 18 itens cada
+    const pagesHtml = [];
+    for (let page = 0; page < totalPages; page++) {
+      const startIndex = page * itemsPerPage;
+      const endIndex = Math.min(startIndex + itemsPerPage, filteredData.length);
+      const pageData = filteredData.slice(startIndex, endIndex);
+      const isLastPage = page === totalPages - 1;
+      const currentPageNum = page + 1;
 
-    const tableBody = `
-      <tbody>
-        ${filteredData.map(item => `
+      // Header da tabela com fundo preto e texto branco
+      const tableHeader = `
+        <thead>
           <tr>
-            <td>${item.tipoSepar}</td>
-            <td>${item.material}</td>
-            ${zones.map(zone => `<td class="text-center">${(item[zone] as number) || 0}</td>`).join('')}
-            <td class="text-center">${item.totalGeral}</td>
+            <th>TIPO SEPARAÇÃO</th>
+            <th>MATERIAL SEPARAÇÃO</th>
+            ${zones.map(zone => `<th class="text-center">${zone}</th>`).join('')}
+            ${isLastPage ? '<th class="text-center">Total Geral</th>' : ''}
           </tr>
-        `).join('')}
-      </tbody>
-    `;
+        </thead>
+      `;
 
-    const tableFooter = `
-      <tfoot>
-        <tr>
-          <td colspan="2" class="text-right"><strong>Total Geral</strong></td>
-          ${zones.map(zone => `<td class="text-center"><strong>${totals[zone]}</strong></td>`).join('')}
-          <td class="text-center"><strong>${totals.totalGeral}</strong></td>
-        </tr>
-      </tfoot>
-    `;
+      // Corpo da tabela para a página atual
+      const tableBody = `
+        <tbody>
+          ${pageData.map(item => `
+            <tr>
+              <td>${item.tipoSepar}</td>
+              <td>${item.material}</td>
+              ${zones.map(zone => `<td class="text-center">${(item[zone] as number) || 0}</td>`).join('')}
+              ${isLastPage ? `<td class="text-center">${item.totalGeral}</td>` : ''}
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+
+      // Footer da tabela (apenas na última página)
+      const tableFooter = isLastPage ? `
+        <tfoot>
+          <tr>
+            <td colspan="2" class="text-right"><strong>Total Geral</strong></td>
+            ${zones.map(zone => `<td class="text-center"><strong>${totals[zone]}</strong></td>`).join('')}
+            <td class="text-center"><strong>${totals.totalGeral}</strong></td>
+          </tr>
+        </tfoot>
+      ` : '';
+
+      pagesHtml.push(`
+        <div class="page-container">
+          <div class="page-info">Página ${currentPageNum}/${totalPages}</div>
+          <table>
+            ${tableHeader}
+            ${tableBody}
+            ${tableFooter}
+          </table>
+        </div>
+      `);
+    }
 
     const reportTitle = `PRÉ-SEPARAÇÃO ${filtroTipo !== 'Todos' ? `(${filtroTipo})` : ''}`;
     const now = new Date();
@@ -180,11 +228,7 @@ export default function PreSeparacaoTab() {
               ${now.toLocaleTimeString('pt-BR')}
             </div>
           </div>
-          <table>
-            ${tableHeader}
-            ${tableBody}
-            ${tableFooter}
-          </table>
+          ${pagesHtml.join('')}
         </body>
       </html>
     `;
@@ -213,39 +257,28 @@ export default function PreSeparacaoTab() {
   // Se der algum pau na busca dos dados, mostramos uma mensagem de erro clara.
   if (error) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-center py-12"
-      >
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-white mb-2">Erro ao carregar dados</h3>
-          <p className="text-gray-400">{error}</p>
-        </div>
-      </motion.div>
+      <div className="flex items-center justify-center py-12">
+        <AlertCircle className="w-8 h-8 text-red-400" />
+        <span className="ml-3 text-gray-400">Erro ao carregar dados: {error}</span>
+      </div>
     );
   }
 
-  // Se tudo deu certo, renderizamos a tabela.
+  // --- RENDERIZAÇÃO PRINCIPAL ---
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="space-y-4"
+      className="space-y-6"
     >
-      {/* Cabeçalho com título, filtros e botão de imprimir */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold apple-font text-white">Pré-Separação por Zona</h2>
-          <p className="text-gray-400">Total de volumes agrupados por material e zona de separação.</p>
-        </div>
-        <div className="flex items-center gap-2">
-            {/* Um grupinho de botões pra fazer o filtro, visualmente mais legal que um Select. */}
-            <div className="flex items-center gap-2 p-1 rounded-lg bg-gray-800/50 border border-gray-700">
-                <Filter className="w-4 h-4 text-gray-400 ml-2" />
-                {availableTypes.filter(t => t !== 'Todos').map(type => (
+      {/* Filtros e botão de impressão */}
+      <div className="bg-gray-900/50 border border-gray-800 rounded-lg p-4">
+        <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-300">TIPO SEPARAÇÃO:</span>
+                {availableTypes.filter(type => type !== 'Todos').map(type => (
                     <Button
                         key={type}
                         size="sm"
@@ -302,38 +335,45 @@ export default function PreSeparacaoTab() {
                     {zones.map(zone => (
                       <TableCell key={zone} className="text-center text-xs border-r border-gray-700">
                         {/* Se o valor for 0, ele aparece mais apagadinho. Um detalhe legal de UI. */}
-                        <span className={ (item[zone] as number || 0) > 0 ? "text-gray-200 font-semibold" : "text-gray-600"}>
+                        <span className={ (item[zone] as number || 0) > 0 ? 
+                          "text-white font-medium" : 
+                          "text-gray-500"
+                        }>
                           {(item[zone] as number) || 0}
                         </span>
                       </TableCell>
                     ))}
                     <TableCell className="text-center text-xs">
-                      <span className="text-white font-bold">{item.totalGeral}</span>
+                      <span className="text-white font-semibold">{item.totalGeral}</span>
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
                   <TableCell colSpan={zones.length + 3} className="text-center text-gray-400 py-8">
-                    Nenhum dado encontrado para a seleção atual.
+                    Nenhum item encontrado para o filtro selecionado.
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
-            {/* Rodapé fixo com os totais, pra dar aquele resumo maroto. */}
-            <tfoot>
-                <TableRow className="bg-gray-800 border-t-2 border-gray-700">
-                    <TableHead colSpan={2} className="text-right text-white font-bold text-sm pr-4">Total Geral</TableHead>
-                    {zones.map(zone => (
-                         <TableCell key={`total-${zone}`} className="text-center text-white font-bold text-sm">
-                            {totals[zone]}
-                         </TableCell>
-                    ))}
-                    <TableCell className="text-center text-white font-bold text-sm">
-                        {totals.totalGeral}
+            {/* Footer com totais só aparece se tiver dados */}
+            {filteredData.length > 0 && (
+              <tfoot>
+                <TableRow className="bg-gray-800/80 border-gray-700">
+                  <TableCell colSpan={2} className="text-right text-white font-semibold text-xs border-r border-gray-700">
+                    Total Geral
+                  </TableCell>
+                  {zones.map(zone => (
+                    <TableCell key={zone} className="text-center text-white font-semibold text-xs border-r border-gray-700">
+                      {totals[zone]}
                     </TableCell>
+                  ))}
+                  <TableCell className="text-center text-white font-semibold text-xs">
+                    {totals.totalGeral}
+                  </TableCell>
                 </TableRow>
-            </tfoot>
+              </tfoot>
+            )}
           </Table>
         </div>
       </div>
