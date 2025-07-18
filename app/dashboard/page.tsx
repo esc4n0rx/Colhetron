@@ -12,6 +12,8 @@ import PreSeparacaoTab from "@/components/tabs/PreSeparacaoTab"
 import SeparacaoTab from "@/components/tabs/SeparacaoTab"
 import MediaSistemaTab from "@/components/tabs/MediaSistemaTab"
 import FaturamentoTab from "@/components/tabs/FaturamentoTab"
+import PosFaturamentoTab from "@/components/tabs/PosFaturamentoTab"
+import PedidosGeradosTab from "@/components/tabs/PedidosGeradosTab"
 import CadastroTab from "@/components/tabs/CadastroTab"
 import NewSeparationModal from "@/components/NewSeparationModal"
 import ConfiguracoesPage from "@/components/pages/ConfiguracoesPage"
@@ -27,6 +29,8 @@ const tabs = [
   { id: "separacao", label: "SEPARAÇÃO" },
   { id: "media", label: "MÉDIA DO SISTEMA" },
   { id: "faturamento", label: "FATURAMENTO" },
+  { id: "pos-faturamento", label: "PÓS FATURAMENTO" },
+  { id: "pedidos-gerados", label: "PEDIDOS GERADOS" },
   { id: "cadastro", label: "CADASTRO" },
 ]
 
@@ -82,6 +86,10 @@ export default function DashboardPage() {
         return <MediaSistemaTab />
       case "faturamento":
         return <FaturamentoTab />
+      case "pos-faturamento":
+        return <PosFaturamentoTab />
+      case "pedidos-gerados":
+        return <PedidosGeradosTab />
       case "cadastro":
         return <CadastroTab />
       default:
