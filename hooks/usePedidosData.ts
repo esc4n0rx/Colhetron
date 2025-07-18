@@ -10,7 +10,7 @@ interface PedidoItem {
   calibre: string
   codigo: string
   descricao: string
-  [key: string]: string | number // Para as colunas das lojas
+  [key: string]: string | number
 }
 
 interface UploadReforcoResponse {
@@ -20,6 +20,16 @@ interface UploadReforcoResponse {
   processedItems?: number
   updatedItems?: number
   newItems?: number
+}
+
+interface UploadRedistribuicaoResponse {
+  success: boolean
+  message?: string
+  error?: string
+  processedItems?: number
+  updatedItems?: number
+  newItems?: number
+  redistributedItems?: number
 }
 
 interface UploadMelanciaResponse {
@@ -41,7 +51,6 @@ export function usePedidosData() {
   const [activeSeparationId, setActiveSeparationId] = useState<string | null>(null)
   const { user } = useAuth()
 
-  // Mapa de status de atividade por item
   const activityStatusMap = createActivityStatusMap(activities, pedidos, lojas, activeSeparationId ?? '')
 
   const fetchData = async () => {
@@ -57,7 +66,6 @@ export function usePedidosData() {
         return
       }
 
-      // Buscar dados da separação
       const response = await fetch('/api/separations/data', {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -74,7 +82,6 @@ export function usePedidosData() {
       setLojas(stores)
       setActiveSeparationId(separationId)
 
-      // Buscar atividades do usuário
       const activitiesResponse = await fetch('/api/activities', {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -113,7 +120,6 @@ export function usePedidosData() {
         throw new Error(errorData.error || 'Erro ao atualizar quantidade')
       }
 
-      // Atualizar dados localmente
       setPedidos(prev => prev.map(pedido => 
         pedido.id === itemId 
           ? { ...pedido, [storeCode]: quantity }
@@ -136,7 +142,7 @@ export function usePedidosData() {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
 
-      const response = await fetch('/api/separations/update-type', {
+      const response = await fetch('/api/separations/update-item-type', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -150,7 +156,6 @@ export function usePedidosData() {
         throw new Error(errorData.error || 'Erro ao atualizar tipo de separação')
       }
 
-      // Atualizar dados localmente
       setPedidos(prev => prev.map(pedido => 
         pedido.id === itemId 
           ? { ...pedido, tipoSepar: typeSeparation } : pedido
@@ -163,19 +168,11 @@ export function usePedidosData() {
     }
   }
 
-  /**
-   * Função para upload de reforço
-   * Implementa as regras de negócio:
-   * - Se material não tinha separação ativa -> adiciona
-   * - Se já tinha quantidade > 0 -> soma
-   * - Se antes tinha quantidade > 0 e agora não tem -> zera (redistribuição)
-   */
   const uploadReforco = async (file: File): Promise<UploadReforcoResponse> => {
     try {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
 
-      // Preparar FormData
       const formData = new FormData()
       formData.append('file', file)
 
@@ -194,7 +191,6 @@ export function usePedidosData() {
 
       const result = await response.json()
 
-      // Recarregar dados após o upload
       await fetchData()
 
       return {
@@ -214,19 +210,57 @@ export function usePedidosData() {
     }
   }
 
-  /**
-   * Função para upload de separação de melancia
-   * Busca melancia específica na separação ativa e atualiza quantidades em KG
-   */
+  const uploadRedistribuicao = async (file: File): Promise<UploadRedistribuicaoResponse> => {
+    try {
+      const token = localStorage.getItem('colhetron_token')
+      if (!token) throw new Error('Token não encontrado')
+
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const response = await fetch('/api/separations/upload-redistribuicao', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erro ao carregar redistribuição')
+      }
+
+      const result = await response.json()
+
+      await fetchData()
+
+      return {
+        success: true,
+        message: result.message,
+        processedItems: result.processedItems,
+        updatedItems: result.updatedItems,
+        newItems: result.newItems,
+        redistributedItems: result.redistributedItems
+      }
+
+    } catch (error) {
+      console.error('Erro ao carregar redistribuição:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro desconhecido'
+      }
+    }
+  }
+
   const uploadMelancia = async (file: File, materialCode: string): Promise<UploadMelanciaResponse> => {
     try {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
 
-      // Preparar FormData
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('materialCode', materialCode) // Adicionar o código do material
+      formData.append('materialCode', materialCode)
 
       const response = await fetch('/api/separations/upload-melancia', {
         method: 'POST',
@@ -243,7 +277,6 @@ export function usePedidosData() {
 
       const result = await response.json()
 
-      // Recarregar dados após o upload
       await fetchData()
 
       return {
@@ -256,7 +289,7 @@ export function usePedidosData() {
       }
 
     } catch (error) {
-      console.error('Erro ao carregar melancia:', error)
+      console.error('Erro ao carregar separação de melancia:', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Erro desconhecido'
@@ -264,8 +297,8 @@ export function usePedidosData() {
     }
   }
 
-  const getItemActivityStatus = (itemId: string, storeCode: string): ItemActivityStatus | undefined => {
-    return activityStatusMap.get(`${itemId}-${storeCode}`)
+  const getItemActivityStatus = (itemId: string, storeCode: string): ItemActivityStatus | null => {
+    return activityStatusMap.get(`${itemId}-${storeCode}`) || null
   }
 
   useEffect(() => {
@@ -275,15 +308,15 @@ export function usePedidosData() {
   return {
     pedidos,
     lojas,
-    activities,
     isLoading,
     error,
     updateQuantity,
-    refetch: fetchData,
+    updateItemType,
+    uploadReforco,
+    uploadRedistribuicao, // Nova função exportada
+    uploadMelancia,
     getItemActivityStatus,
     activeSeparationId,
-    uploadReforco,
-    uploadMelancia,
-    updateItemType
+    refetch: fetchData
   }
 }
