@@ -50,87 +50,47 @@ export async function GET(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Buscar análise de médias para os materiais da separação
+    // Buscar médias para os materiais da separação
     const { data: mediaItems, error: mediaError } = await supabaseAdmin
       .from('colhetron_media_analysis')
-      .select('id, codigo, material, status, media_sistema')
-      .eq('user_id', decoded.userId)
+      .select('codigo, media_real')
       .in('codigo', materialCodes)
 
     if (mediaError) {
-      console.error('Erro ao buscar itens de análise de médias:', mediaError)
-      return NextResponse.json({ error: 'Erro ao buscar dados de análise' }, { status: 500 })
+      console.error('Erro ao buscar médias:', mediaError)
+      return NextResponse.json({ error: 'Erro ao buscar dados de média' }, { status: 500 })
     }
 
-    // Verificar se há materiais sem análise de média
+    // Verificar quais materiais não têm média
     const analyzedCodes = new Set(mediaItems?.map(item => item.codigo) || [])
-    const missingAnalysis = materialCodes.filter(code => !analyzedCodes.has(code))
+    const missingMedia = materialCodes.filter(code => !analyzedCodes.has(code))
 
-    if (missingAnalysis.length > 0) {
+    // Verificar quais materiais têm média mas sem media_real
+    const invalidMedia = mediaItems?.filter(item => !item.media_real).map(item => item.codigo) || []
+
+    const allMissingOrInvalid = [...missingMedia, ...invalidMedia]
+
+    if (allMissingOrInvalid.length > 0) {
       return NextResponse.json({ 
-        error: `Materiais sem análise de média: ${missingAnalysis.join(', ')}. Execute a análise de médias primeiro.`,
-        missingMaterials: missingAnalysis,
-        totalMaterialsInSeparation: materialCodes.length,
-        materialsWithAnalysis: analyzedCodes.size
+        error: `Materiais sem média válida: ${allMissingOrInvalid.join(', ')}`,
+        missingMedia: allMissingOrInvalid,
+        totalMaterials: materialCodes.length,
+        validMaterials: materialCodes.length - allMissingOrInvalid.length
       }, { status: 400 })
     }
 
-    // Analisar status dos itens
-    const errorItems = mediaItems?.filter(item => item.status !== 'OK') || []
-    const criticalItems = errorItems.filter(item => item.status === 'CRÍTICO')
-    const warningItems = errorItems.filter(item => item.status === 'ATENÇÃO')
-
-    const result = {
-      totalItems: mediaItems?.length || 0,
-      totalMaterialsInSeparation: materialCodes.length,
-      itemsWithError: errorItems.length,
-      criticalItems: criticalItems.length,
-      warningItems: warningItems.length,
-      successRate: Math.round(((mediaItems?.length || 0) - errorItems.length) / (mediaItems?.length || 1) * 100),
-      errorItems: errorItems.map(item => ({
-        id: item.id,
-        codigo: item.codigo,
-        material: item.material,
-        status: item.status,
-        error: getErrorMessage(item.status),
-        mediaSistema: item.media_sistema
-      })),
-      summary: {
-        canProceed: errorItems.length === 0,
-        hasWarnings: warningItems.length > 0,
-        hasCriticalIssues: criticalItems.length > 0,
-        recommendedAction: getRecommendedAction(criticalItems.length, warningItems.length)
-      }
-    }
-
-    return NextResponse.json(result)
+    return NextResponse.json({
+      success: true,
+      message: 'Todas as médias estão disponíveis',
+      totalMaterials: materialCodes.length,
+      validMaterials: materialCodes.length
+    })
 
   } catch (error) {
-   console.error('Erro ao verificar status das médias:', error)
-   return NextResponse.json({ 
-     error: 'Erro interno do servidor',
-     details: error instanceof Error ? error.message : 'Erro desconhecido'
-   }, { status: 500 })
- }
-}
-
-function getErrorMessage(status: string): string {
- switch (status) {
-   case 'ATENÇÃO':
-     return 'Diferença significativa entre estoque e quantidade prevista (>10%)'
-   case 'CRÍTICO':
-     return 'Problema crítico: estoque zerado ou discrepância muito alta (>20%)'
-   default:
-     return 'Status não identificado ou problema não especificado'
- }
-}
-
-function getRecommendedAction(criticalCount: number, warningCount: number): string {
- if (criticalCount > 0) {
-   return 'Recomendado corrigir itens críticos antes de prosseguir'
- } else if (warningCount > 0) {
-   return 'Revisar itens com atenção ou prosseguir com cautela'
- } else {
-   return 'Todos os itens estão OK - pode prosseguir com segurança'
- }
+    console.error('Erro ao verificar status das médias:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erro desconhecido' },
+      { status: 500 }
+    )
+  }
 }

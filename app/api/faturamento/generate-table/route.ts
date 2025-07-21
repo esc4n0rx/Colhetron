@@ -1,207 +1,109 @@
+// app/api/faturamento/generate-table/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
-
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Token de autorização necessário' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
     }
 
     const token = authHeader.split(' ')[1]
     const decoded = verifyToken(token)
-    
     if (!decoded) {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    const { items, debug } = await getFaturamentoItems(decoded.userId)
-
-    return NextResponse.json({
-      items,
-      debug,
-      timestamp: new Date().toISOString()
-    })
-
-  } catch (error) {
-    console.error('Erro geral na API de faturamento:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Erro desconhecido' },
-      { status: 500 }
-    )
-  }
-}
-
-async function getActiveSeparationMaterials(userId: string): Promise<string[]> {
-  const { data: activeSeparation, error: sepError } = await supabaseAdmin
-    .from('colhetron_separations')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .single()
-
-  if (sepError || !activeSeparation) {
-    return []
-  }
-
-  const { data: separationItems, error: itemsError } = await supabaseAdmin
-    .from('colhetron_separation_items')
-    .select('material_code')
-    .eq('separation_id', activeSeparation.id)
-
-  if (itemsError || !separationItems) {
-    return []
-  }
-
-  return [...new Set(separationItems.map(item => item.material_code))]
-}
-
-async function getFaturamentoItems(userId: string) {
-  const debugInfo = {
-    totalQuantities: 0,
-    validQuantities: 0,
-    excludedQuantities: 0,
-    processedItems: 0,
-    skippedItems: 0,
-    expectedItems: 0,
-    finalItems: 0,
-    lojasWithoutCenter: [] as string[],
-    processingSteps: [] as string[]
-  }
-
-  try {
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Iniciando processamento para usuário: ${userId}`)
-    
     // Buscar separação ativa
     const { data: activeSeparation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
-      .eq('user_id', userId)
+      .eq('user_id', decoded.userId)
       .eq('status', 'active')
       .single()
 
     if (sepError || !activeSeparation) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Nenhuma separação ativa encontrada`)
-      throw new Error('Nenhuma separação ativa encontrada')
+      return NextResponse.json({ 
+        error: 'Nenhuma separação ativa encontrada. Crie uma separação primeiro.' 
+      }, { status: 404 })
     }
 
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Separação ativa encontrada: ${activeSeparation.id}`)
-
-    // Buscar itens da separação
-    const { data: separationItems, error: itemsError } = await supabaseAdmin
+    // Buscar itens da separação com suas quantidades
+    const { data: separationData, error: dataError } = await supabaseAdmin
       .from('colhetron_separation_items')
-      .select('id, material_code, description')
+      .select(`
+        material_code,
+        colhetron_separation_quantities!inner(
+          store_code,
+          quantity
+        )
+      `)
       .eq('separation_id', activeSeparation.id)
+      .gt('colhetron_separation_quantities.quantity', 0)
 
-    if (itemsError || !separationItems) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar itens de separação`)
-      throw new Error('Erro ao buscar itens de separação')
+    if (dataError) {
+      return NextResponse.json({ error: 'Erro ao buscar dados de separação' }, { status: 500 })
     }
 
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Itens encontrados: ${separationItems.length}`)
+    // Buscar dados das lojas para converter store_code em centro
+    const storeCodes = [...new Set(separationData?.flatMap(item => 
+      item.colhetron_separation_quantities.map(qty => qty.store_code)
+    ) || [])]
 
-    // AJUSTE: Buscar quantidades usando separation_id e filtrando apenas > 0
-    const { data: allQuantities, error: quantitiesError } = await supabaseAdmin
-      .from('colhetron_separation_quantities')
-      .select('store_code, quantity, item_id')
-      .eq('separation_id', activeSeparation.id)
-      .gt('quantity', 0) // AJUSTE: Filtrar apenas quantidades > 0
-
-    if (quantitiesError || !allQuantities) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados de separação`)
-      throw new Error('Erro ao buscar dados de separação')
-    }
-
-    debugInfo.totalQuantities = allQuantities.length
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Total de registros de quantidade > 0: ${allQuantities.length}`)
-
-    // Como já estamos filtrando por quantidade > 0, todos são válidos
-    const separationQuantities = allQuantities
-    debugInfo.validQuantities = separationQuantities.length
-    debugInfo.excludedQuantities = 0
-    
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Quantidades válidas: ${debugInfo.validQuantities}, excluídas: ${debugInfo.excludedQuantities}`)
-
-    // Buscar cadastro de lojas
-    const uniqueStores = [...new Set(separationQuantities.map(q => q.store_code))]
     const { data: storesData, error: storesError } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('prefixo, centro')
-      .in('prefixo', uniqueStores)
+      .in('prefixo', storeCodes)
 
     if (storesError) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados das lojas`)
-      throw new Error('Erro ao buscar dados das lojas')
+      return NextResponse.json({ error: 'Erro ao buscar dados das lojas' }, { status: 500 })
     }
 
-    const storesMap = new Map<string, string>()
+    // Criar mapa de store_code para centro
+    const storeToCenter = new Map<string, string>()
     storesData?.forEach(store => {
       if (store.centro) {
-        storesMap.set(store.prefixo, store.centro)
-      } else {
-        debugInfo.lojasWithoutCenter.push(store.prefixo)
+        storeToCenter.set(store.prefixo, store.centro)
       }
     })
 
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Lojas mapeadas: ${storesMap.size}, sem centro: ${debugInfo.lojasWithoutCenter.length}`)
+    // Montar dados da tabela de faturamento
+    const faturamentoItems: {
+      material: string
+      loja: string
+      centro: string
+      quantidade: number
+    }[] = []
 
-    // Agrupar dados por material
-    const materialsMap = new Map<string, {
-      material_code: string
-      description: string
-      quantities: { [store: string]: number }
-      centers: { [center: string]: number }
-    }>()
-
-    separationItems.forEach(item => {
-      materialsMap.set(item.id, {
-        material_code: item.material_code,
-        description: item.description,
-        quantities: {},
-        centers: {}
+    separationData?.forEach(item => {
+      item.colhetron_separation_quantities.forEach(qty => {
+        const centro = storeToCenter.get(qty.store_code)
+        if (centro) { // Só incluir se tiver centro mapeado
+          faturamentoItems.push({
+            material: item.material_code,
+            loja: qty.store_code,
+            centro: centro,
+            quantidade: qty.quantity
+          })
+        }
       })
     })
 
-    // Processar quantidades
-    separationQuantities.forEach(qty => {
-      const material = materialsMap.get(qty.item_id)
-      if (material) {
-        material.quantities[qty.store_code] = qty.quantity
-        
-        const center = storesMap.get(qty.store_code)
-        if (center) {
-          material.centers[center] = (material.centers[center] || 0) + qty.quantity
-        }
-      }
+    return NextResponse.json({
+      items: faturamentoItems,
+      totalItems: faturamentoItems.length,
+      totalVolume: faturamentoItems.reduce((sum, item) => sum + item.quantidade, 0)
     })
 
-    // Converter para array final
-    const faturamentoItems = Array.from(materialsMap.values()).map(material => ({
-      material: material.material_code,
-      descricao: material.description,
-      ...material.quantities,
-      ...Object.fromEntries(
-        Object.entries(material.centers).map(([center, qty]) => [`TOTAL_${center}`, qty])
-      ),
-      TOTAL_GERAL: Object.values(material.centers).reduce((sum, qty) => sum + qty, 0)
-    }))
-
-    debugInfo.finalItems = faturamentoItems.length
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Processamento concluído. Itens finais: ${debugInfo.finalItems}`)
-
-    return { items: faturamentoItems, debug: debugInfo }
-
   } catch (error) {
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO GERAL: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
-    throw error
+    console.error('Erro ao gerar tabela de faturamento:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erro desconhecido' },
+      { status: 500 }
+    )
   }
 }

@@ -18,33 +18,181 @@ async function generateExcel(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Token de autorização necessário' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Token de autorização necessário' }, { status: 401 })
     }
 
     const token = authHeader.split(' ')[1]
     const decoded = verifyToken(token)
-    
     if (!decoded) {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    const { items, debug } = await getFaturamentoItems(decoded.userId)
+    // Buscar separação ativa
+    const { data: activeSeparation, error: sepError } = await supabaseAdmin
+      .from('colhetron_separations')
+      .select('id')
+      .eq('user_id', decoded.userId)
+      .eq('status', 'active')
+      .single()
 
-    if (items.length === 0) {
-      return NextResponse.json(
-        { error: 'Nenhum item encontrado para gerar o Excel' },
-        { status: 404 }
-      )
+    if (sepError || !activeSeparation) {
+      return NextResponse.json({ 
+        error: 'Nenhuma separação ativa encontrada. Crie uma separação primeiro.' 
+      }, { status: 404 })
+    }
+
+    // Buscar itens da separação com suas quantidades
+    const { data: separationData, error: dataError } = await supabaseAdmin
+      .from('colhetron_separation_items')
+      .select(`
+        material_code,
+        colhetron_separation_quantities!inner(
+          store_code,
+          quantity
+        )
+      `)
+      .eq('separation_id', activeSeparation.id)
+      .gt('colhetron_separation_quantities.quantity', 0)
+
+    if (dataError) {
+      return NextResponse.json({ error: 'Erro ao buscar dados de separação' }, { status: 500 })
+    }
+
+    // Buscar dados das lojas para converter store_code em centro
+    const storeCodes = [...new Set(separationData?.flatMap(item => 
+      item.colhetron_separation_quantities.map(qty => qty.store_code)
+    ) || [])]
+
+    const { data: storesData, error: storesError } = await supabaseAdmin
+      .from('colhetron_lojas')
+      .select('prefixo, centro')
+      .in('prefixo', storeCodes)
+
+    if (storesError) {
+      return NextResponse.json({ error: 'Erro ao buscar dados das lojas' }, { status: 500 })
+    }
+
+    // Criar mapa de store_code para centro
+    const storeToCenter = new Map<string, string>()
+    storesData?.forEach(store => {
+      if (store.centro) {
+        storeToCenter.set(store.prefixo, store.centro)
+      }
+    })
+
+    // Buscar médias para todos os materiais
+    const materialCodes = [...new Set(separationData?.map(item => item.material_code) || [])]
+    const { data: mediasData, error: mediasError } = await supabaseAdmin
+      .from('colhetron_media_analysis')
+      .select('codigo, media_real')
+      .in('codigo', materialCodes)
+
+    if (mediasError) {
+      return NextResponse.json({ error: 'Erro ao buscar médias dos materiais' }, { status: 500 })
+    }
+
+    // Criar mapa de material para média
+    const materialToMedia = new Map<string, number>()
+    mediasData?.forEach(media => {
+      if (media.media_real) {
+        materialToMedia.set(media.codigo, media.media_real)
+      }
+    })
+
+    // Verificar se algum material não tem média
+    const missingMedia: string[] = []
+    materialCodes.forEach(code => {
+      if (!materialToMedia.has(code)) {
+        missingMedia.push(code)
+      }
+    })
+
+    if (missingMedia.length > 0) {
+      return NextResponse.json({
+        error: 'Materiais sem média encontrados',
+        missingMedia: missingMedia
+      }, { status: 400 })
+    }
+
+    // **CORREÇÃO: Agrupar e somar quantidades por material_code + centro**
+    const groupedData = new Map<string, {
+      material_code: string
+      centro: string
+      quantidade_total: number
+    }>()
+
+    separationData?.forEach(item => {
+      const media = materialToMedia.get(item.material_code)
+      
+      if (media) {
+        item.colhetron_separation_quantities.forEach(qty => {
+          const centro = storeToCenter.get(qty.store_code)
+          
+          if (centro) {
+            // Chave única: material + centro
+            const key = `${item.material_code}-${centro}`
+            
+            // Se já existe, somar as quantidades
+            if (groupedData.has(key)) {
+              const existing = groupedData.get(key)!
+              existing.quantidade_total += qty.quantity
+            } else {
+              // Criar novo registro
+              groupedData.set(key, {
+                material_code: item.material_code,
+                centro: centro,
+                quantidade_total: qty.quantity
+              })
+            }
+          }
+        })
+      }
+    })
+
+    // Gerar dados do Excel com formato específico
+    const excelData: any[] = []
+    const currentDate = new Date().toLocaleDateString('pt-BR')
+
+    // Converter o Map agrupado para o formato do Excel
+    groupedData.forEach(group => {
+      const media = materialToMedia.get(group.material_code)!
+      
+      // Calcular quantidade convertida (quantidade_total * media_real)
+      const quantidadeConvertida = group.quantidade_total * media
+      
+      // Converter números com vírgula para ponto (se necessário)
+      const quantidadeFormatada = quantidadeConvertida.toString().replace(',', '.')
+      
+      excelData.push({
+        'Data': currentDate,
+        'Centro': group.centro,
+        'Grupo Comprador': 'F06',
+        'Código Fornecedor': 'CD03',
+        'Código': group.material_code,
+        'QTD': quantidadeFormatada,
+        'DP': 'DP01'
+      })
+    })
+
+    if (excelData.length === 0) {
+      return NextResponse.json({ error: 'Nenhum dado válido para gerar o Excel' }, { status: 404 })
     }
 
     // Criar planilha Excel
-    const worksheet = XLSX.utils.json_to_sheet(items)
+    const worksheet = XLSX.utils.json_to_sheet(excelData)
+    
+    // Ajustar largura das colunas
+    const colWidths = [
+      { wch: 12 }, // Data
+      { wch: 15 }, // Centro
+      { wch: 18 }, // Grupo Comprador
+      { wch: 18 }, // Código Fornecedor
+      { wch: 15 }, // Código
+      { wch: 12 }, // QTD
+      { wch: 8 }   // DP
+    ]
+    worksheet['!cols'] = colWidths
+
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Faturamento')
 
@@ -58,7 +206,6 @@ async function generateExcel(request: NextRequest) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     const fileName = `faturamento_${timestamp}.xlsx`
 
-    // Retornar arquivo
     return new NextResponse(excelBuffer, {
       status: 200,
       headers: {
@@ -74,172 +221,5 @@ async function generateExcel(request: NextRequest) {
       { error: error instanceof Error ? error.message : 'Erro desconhecido' },
       { status: 500 }
     )
-  }
-}
-
-async function getFaturamentoItems(userId: string) {
-  const debugInfo = {
-    totalQuantities: 0,
-    validQuantities: 0,
-    excludedQuantities: 0,
-    processedItems: 0,
-    skippedItems: 0,
-    expectedItems: 0,
-    finalItems: 0,
-    lojasWithoutCenter: [] as string[],
-    processingSteps: [] as string[]
-  }
-
-  try {
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Iniciando processamento para usuário: ${userId}`)
-    
-    // Buscar separação ativa
-    const { data: activeSeparation, error: sepError } = await supabaseAdmin
-      .from('colhetron_separations')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('status', 'active')
-      .single()
-
-    if (sepError || !activeSeparation) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Nenhuma separação ativa encontrada`)
-      throw new Error('Nenhuma separação ativa encontrada')
-    }
-
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Separação ativa encontrada: ${activeSeparation.id}`)
-
-    // Buscar itens da separação
-    const { data: separationItems, error: itemsError } = await supabaseAdmin
-      .from('colhetron_separation_items')
-      .select('id, material_code, description')
-      .eq('separation_id', activeSeparation.id)
-
-    if (itemsError || !separationItems) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar itens de separação`)
-      throw new Error('Erro ao buscar itens de separação')
-    }
-
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Itens de separação encontrados: ${separationItems.length}`)
-    debugInfo.expectedItems = separationItems.length
-
-    // Buscar quantidades dos itens
-    const itemIds = separationItems.map(item => item.id)
-    const { data: separationQuantities, error: quantitiesError } = await supabaseAdmin
-      .from('colhetron_separation_quantities')
-      .select('item_id, store_code, quantity')
-      .in('item_id', itemIds)
-
-    if (quantitiesError || !separationQuantities) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar quantidades`)
-      throw new Error('Erro ao buscar quantidades dos itens')
-    }
-
-    debugInfo.totalQuantities = separationQuantities.length
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Quantidades encontradas: ${separationQuantities.length}`)
-
-    // Buscar médias calculadas
-    const { data: mediasData, error: mediasError } = await supabaseAdmin
-      .from('colhetron_medias_calculadas')
-      .select('item_id, store_code, media_calculada')
-      .in('item_id', itemIds)
-
-    if (mediasError) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] AVISO: Erro ao buscar médias - usando quantidades originais`)
-    }
-
-    const mediasMap = new Map<string, number>()
-    mediasData?.forEach(media => {
-      const key = `${media.item_id}-${media.store_code}`
-      mediasMap.set(key, media.media_calculada)
-    })
-
-    // Aplicar médias às quantidades (se disponíveis)
-    const allQuantities = separationQuantities.map(qty => {
-      const mediaKey = `${qty.item_id}-${qty.store_code}`
-      const mediaCalculada = mediasMap.get(mediaKey)
-      
-      return {
-        ...qty,
-        quantity: mediaCalculada !== undefined ? mediaCalculada : qty.quantity
-      }
-    }).filter(qty => qty.quantity > 0)
-
-    debugInfo.validQuantities = allQuantities.length
-    debugInfo.excludedQuantities = debugInfo.totalQuantities - debugInfo.validQuantities
-
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Quantidades válidas após filtros: ${debugInfo.validQuantities}`)
-
-    // Buscar dados das lojas com centro
-    const storeCodes = [...new Set(allQuantities.map(qty => qty.store_code))]
-    const { data: storesData, error: storesError } = await supabaseAdmin
-      .from('colhetron_lojas')
-      .select('prefixo, centro')
-      .in('prefixo', storeCodes)
-
-    if (storesError || !storesData) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados das lojas`)
-      throw new Error('Erro ao buscar dados das lojas')
-    }
-
-    const storesMap = new Map<string, string>()
-    storesData?.forEach(store => {
-      if (store.centro) {
-        storesMap.set(store.prefixo, store.centro)
-      } else {
-        debugInfo.lojasWithoutCenter.push(store.prefixo)
-      }
-    })
-
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Lojas mapeadas: ${storesMap.size}, sem centro: ${debugInfo.lojasWithoutCenter.length}`)
-
-    // Agrupar dados por material
-    const materialsMap = new Map<string, {
-      material_code: string
-      description: string
-      quantities: { [store: string]: number }
-      centers: { [center: string]: number }
-    }>()
-
-    separationItems.forEach(item => {
-      materialsMap.set(item.id, {
-        material_code: item.material_code,
-        description: item.description,
-        quantities: {},
-        centers: {}
-      })
-    })
-
-    // Processar quantidades
-    allQuantities.forEach(qty => {
-      const material = materialsMap.get(qty.item_id)
-      if (material) {
-        material.quantities[qty.store_code] = qty.quantity
-        
-        const center = storesMap.get(qty.store_code)
-        if (center) {
-          material.centers[center] = (material.centers[center] || 0) + qty.quantity
-        }
-      }
-    })
-
-    // Converter para array final
-    const faturamentoItems = Array.from(materialsMap.values()).map(material => ({
-      Material: material.material_code,
-      Descrição: material.description,
-      ...material.quantities,
-      ...Object.fromEntries(
-        Object.entries(material.centers).map(([center, qty]) => [`TOTAL_${center}`, qty])
-      ),
-      TOTAL_GERAL: Object.values(material.centers).reduce((sum, qty) => sum + qty, 0)
-    }))
-
-    debugInfo.finalItems = faturamentoItems.length
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Processamento concluído. Itens finais: ${debugInfo.finalItems}`)
-
-    return { items: faturamentoItems, debug: debugInfo }
-
-  } catch (error) {
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO GERAL: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
-    throw error
   }
 }
