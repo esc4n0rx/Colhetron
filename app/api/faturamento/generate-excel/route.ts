@@ -135,8 +135,8 @@ async function getFaturamentoItems(userId: string) {
     const uniqueStores = [...new Set(allQuantities.map(q => q.store_code))]
     const { data: storesData, error: storesError } = await supabaseAdmin
       .from('colhetron_lojas')
-      .select('loja, centro')
-      .in('loja', uniqueStores)
+      .select('prefixo, centro')
+      .in('prefixo', uniqueStores)
 
     if (storesError) {
       debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados das lojas`)
@@ -146,9 +146,9 @@ async function getFaturamentoItems(userId: string) {
     const storesMap = new Map<string, string>()
     storesData?.forEach(store => {
       if (store.centro) {
-        storesMap.set(store.loja, store.centro)
+        storesMap.set(store.prefixo, store.centro)
       } else {
-        debugInfo.lojasWithoutCenter.push(store.loja)
+        debugInfo.lojasWithoutCenter.push(store.prefixo)
       }
     })
 

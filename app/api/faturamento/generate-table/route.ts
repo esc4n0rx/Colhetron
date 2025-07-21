@@ -1,9 +1,8 @@
-// app/api/faturamento/generate-table/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -136,8 +135,8 @@ async function getFaturamentoItems(userId: string) {
     const uniqueStores = [...new Set(separationQuantities.map(q => q.store_code))]
     const { data: storesData, error: storesError } = await supabaseAdmin
       .from('colhetron_lojas')
-      .select('loja, centro')
-      .in('loja', uniqueStores)
+      .select('prefixo, centro')
+      .in('prefixo', uniqueStores)
 
     if (storesError) {
       debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados das lojas`)
@@ -147,9 +146,9 @@ async function getFaturamentoItems(userId: string) {
     const storesMap = new Map<string, string>()
     storesData?.forEach(store => {
       if (store.centro) {
-        storesMap.set(store.loja, store.centro)
+        storesMap.set(store.prefixo, store.centro)
       } else {
-        debugInfo.lojasWithoutCenter.push(store.loja)
+        debugInfo.lojasWithoutCenter.push(store.prefixo)
       }
     })
 
