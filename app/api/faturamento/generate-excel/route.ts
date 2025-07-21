@@ -7,6 +7,14 @@ import * as XLSX from 'xlsx'
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 export async function GET(request: NextRequest) {
+  return generateExcel(request)
+}
+
+export async function POST(request: NextRequest) {
+  return generateExcel(request)
+}
+
+async function generateExcel(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -111,34 +119,64 @@ async function getFaturamentoItems(userId: string) {
       throw new Error('Erro ao buscar itens de separação')
     }
 
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Itens encontrados: ${separationItems.length}`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Itens de separação encontrados: ${separationItems.length}`)
+    debugInfo.expectedItems = separationItems.length
 
-    // AJUSTE: Buscar quantidades usando separation_id e filtrando apenas > 0
-    const { data: allQuantities, error: quantitiesError } = await supabaseAdmin
+    // Buscar quantidades dos itens
+    const itemIds = separationItems.map(item => item.id)
+    const { data: separationQuantities, error: quantitiesError } = await supabaseAdmin
       .from('colhetron_separation_quantities')
-      .select('store_code, quantity, item_id')
-      .eq('separation_id', activeSeparation.id)
-      .gt('quantity', 0) // AJUSTE: Filtrar apenas quantidades > 0
+      .select('item_id, store_code, quantity')
+      .in('item_id', itemIds)
 
-    if (quantitiesError || !allQuantities) {
-      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados de separação`)
-      throw new Error('Erro ao buscar dados de separação')
+    if (quantitiesError || !separationQuantities) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar quantidades`)
+      throw new Error('Erro ao buscar quantidades dos itens')
     }
 
-    debugInfo.totalQuantities = allQuantities.length
+    debugInfo.totalQuantities = separationQuantities.length
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Quantidades encontradas: ${separationQuantities.length}`)
+
+    // Buscar médias calculadas
+    const { data: mediasData, error: mediasError } = await supabaseAdmin
+      .from('colhetron_medias_calculadas')
+      .select('item_id, store_code, media_calculada')
+      .in('item_id', itemIds)
+
+    if (mediasError) {
+      debugInfo.processingSteps.push(`[${new Date().toISOString()}] AVISO: Erro ao buscar médias - usando quantidades originais`)
+    }
+
+    const mediasMap = new Map<string, number>()
+    mediasData?.forEach(media => {
+      const key = `${media.item_id}-${media.store_code}`
+      mediasMap.set(key, media.media_calculada)
+    })
+
+    // Aplicar médias às quantidades (se disponíveis)
+    const allQuantities = separationQuantities.map(qty => {
+      const mediaKey = `${qty.item_id}-${qty.store_code}`
+      const mediaCalculada = mediasMap.get(mediaKey)
+      
+      return {
+        ...qty,
+        quantity: mediaCalculada !== undefined ? mediaCalculada : qty.quantity
+      }
+    }).filter(qty => qty.quantity > 0)
+
     debugInfo.validQuantities = allQuantities.length
-    debugInfo.excludedQuantities = 0
+    debugInfo.excludedQuantities = debugInfo.totalQuantities - debugInfo.validQuantities
 
-    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Total de registros de quantidade > 0: ${allQuantities.length}`)
+    debugInfo.processingSteps.push(`[${new Date().toISOString()}] Quantidades válidas após filtros: ${debugInfo.validQuantities}`)
 
-    // Buscar cadastro de lojas
-    const uniqueStores = [...new Set(allQuantities.map(q => q.store_code))]
+    // Buscar dados das lojas com centro
+    const storeCodes = [...new Set(allQuantities.map(qty => qty.store_code))]
     const { data: storesData, error: storesError } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('prefixo, centro')
-      .in('prefixo', uniqueStores)
+      .in('prefixo', storeCodes)
 
-    if (storesError) {
+    if (storesError || !storesData) {
       debugInfo.processingSteps.push(`[${new Date().toISOString()}] ERRO: Erro ao buscar dados das lojas`)
       throw new Error('Erro ao buscar dados das lojas')
     }
