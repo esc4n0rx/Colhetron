@@ -1,7 +1,9 @@
+// app/api/separations/active/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,31 +25,25 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { data: separation, error } = await supabaseAdmin
+    // Buscar separação ativa do usuário
+    const { data: separation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
-      .select(`
-        id,
-        type,
-        date,
-        status,
-        file_name,
-        total_items,
-        total_stores,
-        created_at
-      `)
+      .select('*')
       .eq('user_id', decoded.userId)
       .eq('status', 'active')
       .single()
 
-    if (error && error.code !== 'PGRST116') {
-      throw error
+    if (sepError && sepError.code !== 'PGRST116') {
+      console.error('Erro ao buscar separação ativa:', sepError)
+      return NextResponse.json(
+        { error: 'Erro interno do servidor' },
+        { status: 500 }
+      )
     }
 
-    if (!separation) {
-      return NextResponse.json({ separation: null })
-    }
-
-    return NextResponse.json({ separation })
+    return NextResponse.json({
+      separation: separation || null
+    })
 
   } catch (error) {
     console.error('Erro ao buscar separação ativa:', error)

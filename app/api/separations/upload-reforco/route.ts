@@ -1,3 +1,4 @@
+// app/api/separations/upload-reforco/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -94,10 +95,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // AJUSTE: Filtrar materiais que não têm nenhuma quantidade > 0
+    const materialsWithQuantity = processedData.materials.filter((material, index) => {
+      const materialQuantities = processedData.quantities.filter(q => q.materialIndex === index)
+      return materialQuantities.some(q => q.quantity > 0)
+    })
+
+    if (materialsWithQuantity.length === 0) {
+      return NextResponse.json(
+        { error: 'Nenhum material com quantidade válida (> 0) encontrado na planilha' },
+        { status: 400 }
+      )
+    }
+
+    // Filtrar as quantidades dos materiais válidos
+    const validMaterialIndices = new Set(
+      processedData.materials
+        .map((material, index) => materialsWithQuantity.includes(material) ? index : -1)
+        .filter(index => index !== -1)
+    )
+
+    const filteredQuantities = processedData.quantities.filter(q => 
+      validMaterialIndices.has(q.materialIndex) && q.quantity > 0
+    )
+
+    const filteredProcessedData = {
+      materials: materialsWithQuantity,
+      stores: processedData.stores,
+      quantities: filteredQuantities.map(q => ({
+        ...q,
+        materialIndex: materialsWithQuantity.findIndex(m => 
+          processedData.materials[q.materialIndex].code === m.code
+        )
+      }))
+    }
+
     const reforcoResult = await processReforco({
       userId: decoded.userId,
       separationId: activeSeparation.id,
-      processedData,
+      processedData: filteredProcessedData,
       fileName: file.name
     })
 
@@ -239,10 +275,6 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
     throw new Error('Nenhum material encontrado na planilha de reforço')
   }
 
-  if (stores.length === 0) {
-    throw new Error('Nenhuma loja encontrada na planilha de reforço')
-  }
-
   return { materials, stores, quantities }
 }
 
@@ -252,25 +284,20 @@ async function processReforco(params: {
   processedData: ProcessedReforcoData
   fileName: string
 }): Promise<{ data: ReforcoProcessingResult | null; error: string | null }> {
-  const { userId, separationId, processedData, fileName } = params
+  const { separationId, processedData } = params
 
   try {
+    // Buscar todas as lojas da separação usando separation_id
     const { data: allSeparationStores, error: storesError } = await supabaseAdmin
       .from('colhetron_separation_quantities')
       .select('store_code')
-      .in('item_id', 
-        await supabaseAdmin
-          .from('colhetron_separation_items')
-          .select('id')
-          .eq('separation_id', separationId)
-          .then(({ data }) => data?.map(item => item.id) || [])
-      )
+      .eq('separation_id', separationId)
 
     if (storesError) {
       throw new Error(`Erro ao buscar lojas da separação: ${storesError.message}`)
     }
 
-    const allExistingStores = [...new Set(allSeparationStores.map(s => s.store_code))]
+    const allExistingStores = [...new Set(allSeparationStores?.map(s => s.store_code) || [])]
 
     const materialCodes = processedData.materials.map(m => m.code)
     const { data: globalMaterials, error: materialsError } = await supabaseAdmin
@@ -283,164 +310,154 @@ async function processReforco(params: {
     }
 
     const materialTypeMap = new Map<string, string>()
-    globalMaterials.forEach(m => {
+    globalMaterials?.forEach(m => {
       materialTypeMap.set(m.material, m.diurno || 'SECO')
+    })
+
+    const { data: existingSeparationItems, error: itemsError } = await supabaseAdmin
+      .from('colhetron_separation_items')
+      .select('id, material_code, description')
+      .eq('separation_id', separationId)
+      .in('material_code', materialCodes)
+
+    if (itemsError) {
+      throw new Error(`Erro ao buscar itens existentes: ${itemsError.message}`)
+    }
+
+    const existingItemsMap = new Map<string, { id: string; description: string }>()
+    existingSeparationItems?.forEach(item => {
+      existingItemsMap.set(item.material_code, { id: item.id, description: item.description })
     })
 
     let processedItems = 0
     let updatedItems = 0
     let newItems = 0
     let redistributedItems = 0
-
     const processedMaterialCodes: string[] = []
     const newMaterialCodes: string[] = []
     const updatedMaterialCodes: string[] = []
     const redistributedMaterialCodes: string[] = []
 
     for (const material of processedData.materials) {
-      try {
-        const { data: existingItem, error: itemError } = await supabaseAdmin
+      processedItems++
+      processedMaterialCodes.push(material.code)
+
+      let itemId: string
+
+      if (existingItemsMap.has(material.code)) {
+        const existingItem = existingItemsMap.get(material.code)!
+        itemId = existingItem.id
+        updatedItems++
+        updatedMaterialCodes.push(material.code)
+      } else {
+        const { data: newItem, error: newItemError } = await supabaseAdmin
           .from('colhetron_separation_items')
+          .insert([{
+            separation_id: separationId,
+            material_code: material.code,
+            description: material.description,
+            row_number: material.rowNumber,
+            type_separation: materialTypeMap.get(material.code) || 'SECO'
+          }])
           .select('id')
-          .eq('separation_id', separationId)
-          .eq('material_code', material.code)
           .single()
 
-        let itemId: string
-        let isNewMaterial = false
-
-        if (itemError || !existingItem) {
-          const { data: newItem, error: createError } = await supabaseAdmin
-            .from('colhetron_separation_items')
-            .insert([{
-              separation_id: separationId,
-              material_code: material.code,
-              description: material.description,
-              row_number: material.rowNumber,
-              type_separation: materialTypeMap.get(material.code) || 'SECO'
-            }])
-            .select('id')
-            .single()
-
-          if (createError || !newItem) {
-            console.error(`Erro ao criar item ${material.code}:`, createError)
-            continue
-          }
-
-          itemId = newItem.id
-          newItems++
-          isNewMaterial = true
-          newMaterialCodes.push(material.code)
-        } else {
-          itemId = existingItem.id
-          updatedItems++
-          updatedMaterialCodes.push(material.code)
-        }
-
-        const { data: currentQuantities, error: quantitiesError } = await supabaseAdmin
-          .from('colhetron_separation_quantities')
-          .select('store_code, quantity')
-          .eq('item_id', itemId)
-
-        if (quantitiesError) {
-          console.error(`Erro ao buscar quantidades para ${material.code}:`, quantitiesError)
+        if (newItemError || !newItem) {
+          console.error(`Erro ao inserir novo item ${material.code}:`, newItemError)
           continue
         }
 
-        const currentQuantitiesMap = new Map<string, number>()
-        currentQuantities.forEach(q => {
-          currentQuantitiesMap.set(q.store_code, q.quantity)
-        })
+        itemId = newItem.id
+        newItems++
+        newMaterialCodes.push(material.code)
+      }
 
-        const materialQuantities = processedData.quantities.filter(q => q.materialIndex === processedData.materials.indexOf(material))
-        const reforcoQuantitiesMap = new Map<string, number>()
-        
-        materialQuantities.forEach(rq => {
-          reforcoQuantitiesMap.set(rq.storeCode, rq.quantity)
-        })
+      // Buscar quantidades existentes usando separation_id
+      const { data: currentQuantities, error: quantitiesError } = await supabaseAdmin
+        .from('colhetron_separation_quantities')
+        .select('store_code, quantity')
+        .eq('separation_id', separationId)
+        .eq('item_id', itemId)
 
-        let hadRedistribution = false
-
-        const allStoresToProcess = new Set([
-          ...processedData.stores,
-          ...Array.from(currentQuantitiesMap.keys())
-        ])
-
-        for (const storeCode of allStoresToProcess) {
-          const currentQuantity = currentQuantitiesMap.get(storeCode) || 0
-          const reforcoQuantity = reforcoQuantitiesMap.get(storeCode) || 0
-          let newQuantity = 0
-
-          // APLICAR REGRAS DE NEGÓCIO CORRETAS:
-          if (currentQuantity === 0 && reforcoQuantity > 0) {
-            // Se antes tinha 0, agora tem X -> adicionar X
-            newQuantity = reforcoQuantity
-          } else if (currentQuantity > 0 && reforcoQuantity > 0) {
-            // Se antes tinha X, agora tem Y -> somar (X + Y)
-            newQuantity = currentQuantity + reforcoQuantity
-          } else if (currentQuantity > 0 && reforcoQuantity === 0) {
-            // Se antes tinha X, agora está vazio/zero -> zerar (redistribuição)
-            newQuantity = 0
-            redistributedItems++
-            hadRedistribution = true
-          } else {
-            newQuantity = 0
-          }
-
-
-          if (currentQuantitiesMap.has(storeCode)) {
-
-            const { error: updateError } = await supabaseAdmin
-              .from('colhetron_separation_quantities')
-              .update({ quantity: newQuantity })
-              .eq('item_id', itemId)
-              .eq('store_code', storeCode)
-
-            if (updateError) {
-              console.error(`Erro ao atualizar quantidade ${material.code}-${storeCode}:`, updateError)
-            }
-          } else if (newQuantity > 0) {
-            const { error: insertError } = await supabaseAdmin
-              .from('colhetron_separation_quantities')
-              .insert([{
-                item_id: itemId,
-                store_code: storeCode,
-                quantity: newQuantity
-              }])
-
-            if (insertError) {
-              console.error(`Erro ao inserir quantidade ${material.code}-${storeCode}:`, insertError)
-            }
-          }
-        }
-
-        processedMaterialCodes.push(material.code)
-        
-        if (hadRedistribution && !redistributedMaterialCodes.includes(material.code)) {
-          redistributedMaterialCodes.push(material.code)
-        }
-
-        processedItems++
-
-      } catch (error) {
-        console.error(`Erro ao processar material ${material.code}:`, error)
+      if (quantitiesError) {
+        console.error(`Erro ao buscar quantidades para ${material.code}:`, quantitiesError)
         continue
       }
-    }
 
-    const { error: updateSeparationError } = await supabaseAdmin
-      .from('colhetron_separations')
-      .update({
-        total_items: await supabaseAdmin
-          .from('colhetron_separation_items')
-          .select('id', { count: 'exact' })
-          .eq('separation_id', separationId)
-          .then(({ count }) => count || 0)
+      const currentQuantitiesMap = new Map<string, number>()
+      currentQuantities?.forEach(q => {
+        currentQuantitiesMap.set(q.store_code, q.quantity)
       })
-      .eq('id', separationId)
 
-    if (updateSeparationError) {
-      console.error('Erro ao atualizar totais da separação:', updateSeparationError)
+      const materialQuantities = processedData.quantities.filter(q => q.materialIndex === processedData.materials.indexOf(material))
+      const reforcoQuantitiesMap = new Map<string, number>()
+      
+      materialQuantities.forEach(rq => {
+        reforcoQuantitiesMap.set(rq.storeCode, rq.quantity)
+      })
+
+      let hadRedistribution = false
+
+      const allStoresToProcess = new Set([
+        ...processedData.stores,
+        ...Array.from(currentQuantitiesMap.keys())
+      ])
+
+      for (const storeCode of allStoresToProcess) {
+        const currentQuantity = currentQuantitiesMap.get(storeCode) || 0
+        const reforcoQuantity = reforcoQuantitiesMap.get(storeCode) || 0
+        let newQuantity = 0
+
+        // APLICAR REGRAS DE NEGÓCIO CORRETAS:
+        if (currentQuantity === 0 && reforcoQuantity > 0) {
+          // Se antes tinha 0, agora tem X -> adicionar X
+          newQuantity = reforcoQuantity
+        } else if (currentQuantity > 0 && reforcoQuantity > 0) {
+          // Se antes tinha X, agora tem Y -> somar (X + Y)
+          newQuantity = currentQuantity + reforcoQuantity
+        } else if (currentQuantity > 0 && reforcoQuantity === 0) {
+          // Se antes tinha X, agora está vazio/zero -> zerar (redistribuição)
+          newQuantity = 0
+          redistributedItems++
+          hadRedistribution = true
+        } else {
+          newQuantity = 0
+        }
+
+        if (currentQuantitiesMap.has(storeCode)) {
+          if (newQuantity === 0) {
+            // Deletar registro se quantidade é 0
+            await supabaseAdmin
+              .from('colhetron_separation_quantities')
+              .delete()
+              .eq('separation_id', separationId)
+              .eq('item_id', itemId)
+              .eq('store_code', storeCode)
+          } else {
+            // Atualizar quantidade existente
+            await supabaseAdmin
+              .from('colhetron_separation_quantities')
+              .update({ quantity: newQuantity })
+              .eq('separation_id', separationId)
+              .eq('item_id', itemId)
+              .eq('store_code', storeCode)
+          }
+        } else if (newQuantity > 0) {
+          // Inserir nova quantidade com separation_id
+          await supabaseAdmin
+            .from('colhetron_separation_quantities')
+            .insert([{
+              item_id: itemId,
+              separation_id: separationId, // AJUSTE: Incluir separation_id
+              store_code: storeCode,
+              quantity: newQuantity
+            }])
+        }
+      }
+
+      if (hadRedistribution) {
+        redistributedMaterialCodes.push(material.code)
+      }
     }
 
     return {
@@ -458,10 +475,10 @@ async function processReforco(params: {
     }
 
   } catch (error) {
-    console.error('Erro no processamento do reforço:', error)
+    console.error('Erro ao processar reforço:', error)
     return {
       data: null,
-      error: error instanceof Error ? error.message : 'Erro desconhecido no processamento'
+      error: error instanceof Error ? error.message : 'Erro desconhecido'
     }
   }
 }

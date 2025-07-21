@@ -1,3 +1,4 @@
+// app/api/separations/product-cut/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -17,7 +18,7 @@ const partialStoreCutSchema = z.object({
 
 const cutRequestSchema = z.object({
   material_code: z.string().min(1, 'Código do material é obrigatório'),
-  description: z.string().optional(), // Novo campo para descrição
+  description: z.string().optional(),
   cut_type: z.enum(['all', 'specific', 'partial']),
   stores: z.array(specificStoreCutSchema).optional(),
   partial_cuts: z.array(partialStoreCutSchema).optional()
@@ -60,31 +61,33 @@ export async function POST(request: NextRequest) {
       }, { status: 404 })
     }
 
-    // Construir a query de busca do item com material_code e description
+    // Construir a query de busca do item
     let itemQuery = supabaseAdmin
       .from('colhetron_separation_items')
       .select('id, description, row_number, type_separation')
       .eq('separation_id', activeSeparation.id)
       .eq('material_code', validatedData.material_code)
 
-    // Se a description foi fornecida, adicionar à query para maior precisão
     if (validatedData.description) {
       itemQuery = itemQuery.eq('description', validatedData.description)
     }
 
     const { data: separationItem, error: itemError } = await itemQuery.single()
 
+    // app/api/separations/product-cut/route.ts (continuação)
     if (itemError || !separationItem) {
       return NextResponse.json({ 
         error: 'Produto não encontrado na separação ativa' 
       }, { status: 404 })
     }
 
+    // AJUSTE: Buscar quantidades usando separation_id e filtrando apenas > 0
     const { data: currentQuantities, error: quantitiesError } = await supabaseAdmin
       .from('colhetron_separation_quantities')
       .select('store_code, quantity')
+      .eq('separation_id', activeSeparation.id)
       .eq('item_id', separationItem.id)
-      .gt('quantity', 0)
+      .gt('quantity', 0) // AJUSTE: Filtrar apenas quantidades > 0
 
     if (quantitiesError) {
       console.error('Erro ao buscar quantidades atuais:', quantitiesError)
@@ -194,17 +197,20 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // Executar atualizações usando separation_id
     const updatePromises = updatesToExecute.map(update => {
       if (update.new_quantity === 0) {
         return supabaseAdmin
           .from('colhetron_separation_quantities')
           .delete()
+          .eq('separation_id', activeSeparation.id)
           .eq('item_id', separationItem.id)
           .eq('store_code', update.store_code)
       } else {
         return supabaseAdmin
           .from('colhetron_separation_quantities')
           .update({ quantity: update.new_quantity })
+          .eq('separation_id', activeSeparation.id)
           .eq('item_id', separationItem.id)
           .eq('store_code', update.store_code)
       }

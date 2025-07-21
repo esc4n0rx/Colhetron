@@ -1,49 +1,32 @@
+// app/api/separations/upload-melancia/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logActivity } from '@/lib/activity-logger'
 import * as XLSX from 'xlsx'
-
 
 const MELANCIA_MATERIAL_CODES = ['100195', '142223', '154875']
 
 interface ProcessedMelanciaData {
   stores: string[]
-  quantities: Array<{
-    storeCode: string
-    kg: number
-  }>
+  quantities: Array<{ storeCode: string; kg: number }>
 }
 
 interface MelanciaProcessingResult {
   processedStores: number
   updatedStores: number
-  notFoundStores: string[]
+  notFoundStores: number
   totalKgProcessed: number
-  melanciaItemsFound: Array<{
-    materialCode: string
-    description: string
-  }>
 }
 
-/**
- * Função para converter números com vírgula para float
- * Adaptada do PasteDataModal para manter consistência
- */
-function parseNumber(value: string | number | undefined | null): number {
-  if (value === undefined || value === null || value === '') return 0
-  
-  if (typeof value === 'number') {
-    return isNaN(value) ? 0 : value
+function parseNumber(value: any): number {
+  if (typeof value === 'number') return value
+  if (typeof value === 'string') {
+    const cleanValue = value.replace(',', '.')
+    const num = parseFloat(cleanValue)
+    return isNaN(num) ? 0 : num
   }
-  
-  // Remove espaços e substitui vírgula por ponto
-  // Remove pontos que são separadores de milhares (mantém apenas a última vírgula/ponto como decimal)
-  const cleanValue = String(value).trim()
-    .replace(/\./g, '') // Remove pontos de milhares
-    .replace(',', '.') // Substitui vírgula decimal por ponto
-  
-  const parsed = parseFloat(cleanValue)
-  return isNaN(parsed) ? 0 : parsed
+  return 0
 }
 
 export async function POST(request: NextRequest) {
@@ -66,36 +49,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Buscar separação ativa
-    const { data: separation, error: sepError } = await supabaseAdmin
-      .from('colhetron_separations')
-      .select('id')
-      .eq('user_id', decoded.userId)
-      .eq('status', 'active')
-      .single()
-
-    if (sepError || !separation) {
-      return NextResponse.json(
-        { error: 'Nenhuma separação ativa encontrada' },
-        { status: 404 }
-      )
-    }
-
     const formData = await request.formData()
     const file = formData.get('file') as File
     const materialCode = formData.get('materialCode') as string
 
-    if (!file) {
+    if (!file || !materialCode) {
       return NextResponse.json(
-        { error: 'Nenhum arquivo enviado' },
+        { error: 'Arquivo e código do material são obrigatórios' },
         { status: 400 }
       )
     }
 
-    if (!materialCode || !MELANCIA_MATERIAL_CODES.includes(materialCode)) {
+    if (!MELANCIA_MATERIAL_CODES.includes(materialCode)) {
       return NextResponse.json(
         { error: `Código de material inválido. Códigos aceitos: ${MELANCIA_MATERIAL_CODES.join(', ')}` },
         { status: 400 }
+      )
+    }
+
+    // Verificar separação ativa
+    const { data: separation, error: separationError } = await supabaseAdmin
+      .from('colhetron_separations')
+      .select('id, type, date')
+      .eq('user_id', decoded.userId)
+      .eq('status', 'active')
+      .single()
+
+    if (separationError || !separation) {
+      return NextResponse.json(
+        { error: 'Nenhuma separação ativa encontrada. Crie uma separação antes de carregar melancia.' },
+        { status: 404 }
       )
     }
 
@@ -103,13 +86,23 @@ export async function POST(request: NextRequest) {
     const buffer = new Uint8Array(await file.arrayBuffer())
     const processedData = await processExcelFile(buffer)
 
+    // Filtrar apenas quantidades > 0
+    const filteredQuantities = processedData.quantities.filter(q => q.kg > 0)
+    
+    if (filteredQuantities.length === 0) {
+      return NextResponse.json(
+        { error: 'Nenhuma quantidade válida (> 0) encontrada na planilha' },
+        { status: 400 }
+      )
+    }
+
     // Processar dados da melancia
     const result = await processMelancia({
       userId: decoded.userId,
       separationId: separation.id,
-      processedData,
+      processedData: { ...processedData, quantities: filteredQuantities },
       fileName: file.name,
-      materialCode // Passar o código específico
+      materialCode
     })
 
     if (result.error) {
@@ -147,15 +140,11 @@ async function processExcelFile(buffer: Uint8Array): Promise<ProcessedMelanciaDa
 
   // Processar dados a partir da linha 2 (assumindo header na linha 1)
   for (let row = 1; row <= range.e.r; row++) {
-    // Coluna A - Loja
     const lojaCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 0 })]
-    // Coluna B - Quantidade (não usada no processamento final)
-    // Coluna C - KG
     const kgCell = worksheet[XLSX.utils.encode_cell({ r: row, c: 2 })]
 
     if (lojaCell && lojaCell.v && kgCell && kgCell.v !== undefined) {
       const storeCode = String(lojaCell.v).trim()
-      // Usar a função parseNumber para aceitar números com vírgula
       const kg = parseNumber(kgCell.v)
 
       if (storeCode && kg >= 0) {
@@ -180,24 +169,15 @@ async function processMelancia(params: {
   separationId: string
   processedData: ProcessedMelanciaData
   fileName: string
-  materialCode: string // Novo parâmetro
+  materialCode: string
 }): Promise<{ data: MelanciaProcessingResult | null; error: string | null }> {
-  const { separationId, processedData, fileName, materialCode } = params
+  const { separationId, processedData, materialCode } = params
 
   try {
-    // Buscar o item específico da melancia (código específico) na separação ativa
+    // Buscar o item específico da melancia na separação ativa
     const { data: melanciaItems, error: melanciaError } = await supabaseAdmin
       .from('colhetron_separation_items')
-      .select(`
-        id,
-        material_code,
-        description,
-        colhetron_separation_quantities (
-          id,
-          store_code,
-          quantity
-        )
-      `)
+      .select('id, material_code, description')
       .eq('separation_id', separationId)
       .eq('material_code', materialCode)
 
@@ -207,10 +187,20 @@ async function processMelancia(params: {
 
     const melanciaItem = melanciaItems[0]
 
-    const melanciaQuantitiesMap = new Map<string, any>()
-    
-    melanciaItem.colhetron_separation_quantities.forEach((qty: any) => {
-      melanciaQuantitiesMap.set(qty.store_code, qty)
+    // Buscar quantidades existentes usando separation_id
+    const { data: existingQuantities, error: quantitiesError } = await supabaseAdmin
+      .from('colhetron_separation_quantities')
+      .select('store_code, quantity')
+      .eq('separation_id', separationId)
+      .eq('item_id', melanciaItem.id)
+
+    if (quantitiesError) {
+      throw new Error(`Erro ao buscar quantidades existentes: ${quantitiesError.message}`)
+    }
+
+    const existingQuantitiesMap = new Map<string, number>()
+    existingQuantities?.forEach(qty => {
+      existingQuantitiesMap.set(qty.store_code, qty.quantity)
     })
 
     const updatedStores: string[] = []
@@ -218,54 +208,50 @@ async function processMelancia(params: {
     let totalKgProcessed = 0
 
     for (const quantity of processedData.quantities) {
-      const existingQuantity = melanciaQuantitiesMap.get(quantity.storeCode)
+      const hasExistingQuantity = existingQuantitiesMap.has(quantity.storeCode)
       
-      if (existingQuantity) {
+      if (hasExistingQuantity) {
+        // Atualizar quantidade existente
         const { error: updateError } = await supabaseAdmin
           .from('colhetron_separation_quantities')
           .update({ quantity: quantity.kg })
-          .eq('id', existingQuantity.id)
+          .eq('separation_id', separationId)
+          .eq('item_id', melanciaItem.id)
+          .eq('store_code', quantity.storeCode)
 
         if (updateError) {
-          console.error(`Erro ao atualizar loja ${quantity.storeCode}:`, updateError)
+          console.error(`Erro ao atualizar ${quantity.storeCode}:`, updateError)
         } else {
           updatedStores.push(quantity.storeCode)
           totalKgProcessed += quantity.kg
-          
-          await supabaseAdmin
-            .from('colhetron_user_activities')
-            .insert({
-              user_id: params.userId,
-              action: 'upload_melancia',
-              details: `Melancia ${melanciaItem.material_code} atualizada: Loja ${quantity.storeCode} - ${quantity.kg}kg`,
-              type: 'update',
-              metadata: {
-                separationId: separationId,
-                materialCode: melanciaItem.material_code,
-                materialDescription: melanciaItem.description,
-                storeCode: quantity.storeCode,
-                quantity: quantity.kg,
-                fileName: fileName
-              }
-            })
         }
       } else {
-        notFoundStores.push(quantity.storeCode)
+        // Inserir nova quantidade com separation_id
+        const { error: insertError } = await supabaseAdmin
+          .from('colhetron_separation_quantities')
+          .insert([{
+            item_id: melanciaItem.id,
+            separation_id: separationId, // AJUSTE: Incluir separation_id
+            store_code: quantity.storeCode,
+            quantity: quantity.kg
+          }])
+
+        if (insertError) {
+          console.error(`Erro ao inserir ${quantity.storeCode}:`, insertError)
+          notFoundStores.push(quantity.storeCode)
+        } else {
+          updatedStores.push(quantity.storeCode)
+          totalKgProcessed += quantity.kg
+        }
       }
     }
 
-    const melanciaItemsFound = [{
-      materialCode: melanciaItem.material_code,
-      description: melanciaItem.description
-    }]
-
     return {
       data: {
-        processedStores: processedData.stores.length,
+        processedStores: processedData.quantities.length,
         updatedStores: updatedStores.length,
-        notFoundStores,
-        totalKgProcessed,
-        melanciaItemsFound
+        notFoundStores: notFoundStores.length,
+        totalKgProcessed
       },
       error: null
     }

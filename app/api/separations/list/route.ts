@@ -1,6 +1,9 @@
+// app/api/separations/list/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
+
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,33 +25,27 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { data: separations, error } = await supabaseAdmin
+    // Buscar todas as separações do usuário, ordenadas por data de criação (mais recentes primeiro)
+    const { data: separations, error: separationsError } = await supabaseAdmin
       .from('colhetron_separations')
-      .select(`
-        id,
-        type,
-        date,
-        status,
-        file_name,
-        total_items,
-        total_stores,
-        created_at
-      `)
+      .select('*')
       .eq('user_id', decoded.userId)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Erro ao buscar separações:', error)
+    if (separationsError) {
+      console.error('Erro ao buscar separações:', separationsError)
       return NextResponse.json(
-        { error: 'Erro ao buscar separações' },
+        { error: 'Erro interno do servidor' },
         { status: 500 }
       )
     }
 
-    return NextResponse.json({ separations: separations || [] })
+    return NextResponse.json({
+      separations: separations || []
+    })
 
   } catch (error) {
-    console.error('Erro na listagem:', error)
+    console.error('Erro ao buscar separações:', error)
     return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }

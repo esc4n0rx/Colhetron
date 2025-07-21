@@ -1,9 +1,10 @@
+// app/api/separations/update-quantity/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-logger'
 
-export async function PUT(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -27,96 +28,105 @@ export async function PUT(request: NextRequest) {
 
     if (!itemId || !storeCode || quantity === undefined) {
       return NextResponse.json(
-        { error: 'itemId, storeCode e quantity são obrigatórios' },
+        { error: 'ItemId, storeCode e quantity são obrigatórios' },
         { status: 400 }
       )
     }
 
-    const { data: item, error: itemError } = await supabaseAdmin
-      .from('colhetron_separation_items')
-      .select(`
-        id,
-        separation_id,
-        material_code
-      `)
-      .eq('id', itemId)
-      .single()
-
-    if (itemError || !item) {
-      console.error('Erro ao buscar item:', itemError)
-      return NextResponse.json(
-        { error: 'Item não encontrado' },
-        { status: 404 }
-      )
-    }
-
+    // Verificar se há separação ativa
     const { data: separation, error: separationError } = await supabaseAdmin
       .from('colhetron_separations')
-      .select('id, user_id, status')
-      .eq('id', item.separation_id)
+      .select('id')
+      .eq('user_id', decoded.userId)
+      .eq('status', 'active')
       .single()
 
     if (separationError || !separation) {
-      console.error('Erro ao buscar separação:', separationError)
       return NextResponse.json(
-        { error: 'Separação não encontrada' },
+        { error: 'Nenhuma separação ativa encontrada' },
         { status: 404 }
       )
     }
 
-    if (separation.user_id !== decoded.userId) {
+    // Verificar se o item pertence à separação ativa
+    const { data: item, error: itemError } = await supabaseAdmin
+      .from('colhetron_separation_items')
+      .select('id, material_code, description')
+      .eq('id', itemId)
+      .eq('separation_id', separation.id)
+      .single()
+
+    if (itemError || !item) {
       return NextResponse.json(
-        { error: 'Não autorizado para editar este item' },
-        { status: 403 }
+        { error: 'Item não encontrado na separação ativa' },
+        { status: 404 }
       )
     }
 
-    if (separation.status !== 'active') {
-      return NextResponse.json(
-        { error: 'Não é possível editar uma separação não ativa' },
-        { status: 400 }
-      )
-    }
-
-    const { data: existingQuantity, error: quantityCheckError } = await supabaseAdmin
+    // Buscar quantidade existente usando separation_id
+    const { data: existingQuantities, error: quantityError } = await supabaseAdmin
       .from('colhetron_separation_quantities')
-      .select('id, quantity')
+      .select('quantity')
+      .eq('separation_id', separation.id)
       .eq('item_id', itemId)
       .eq('store_code', storeCode)
       .single()
 
-    if (quantityCheckError && quantityCheckError.code !== 'PGRST116') {
-      console.error('Erro ao verificar quantidade existente:', quantityCheckError)
-      return NextResponse.json(
-        { error: 'Erro ao verificar dados existentes' },
-        { status: 500 }
-      )
-    }
-    
-    const oldQuantity = existingQuantity?.quantity ?? 0;
+    const oldQuantity = existingQuantities?.quantity || 0
 
     if (quantity > 0) {
-      if (existingQuantity) {
+      if (existingQuantities) {
+        // Atualizar quantidade existente
         const { error: updateError } = await supabaseAdmin
           .from('colhetron_separation_quantities')
           .update({ quantity: quantity })
+          .eq('separation_id', separation.id)
           .eq('item_id', itemId)
           .eq('store_code', storeCode)
-        if (updateError) { /* ... error handling ... */ }
+
+        if (updateError) {
+          console.error('Erro ao atualizar quantidade:', updateError)
+          return NextResponse.json(
+            { error: 'Erro ao atualizar quantidade' },
+            { status: 500 }
+          )
+        }
       } else {
+        // Inserir nova quantidade com separation_id
         const { error: insertError } = await supabaseAdmin
           .from('colhetron_separation_quantities')
-          .insert([{ item_id: itemId, store_code: storeCode, quantity: quantity }])
-        if (insertError) { /* ... error handling ... */ }
+          .insert([{
+            item_id: itemId,
+            separation_id: separation.id, // AJUSTE: Incluir separation_id
+            store_code: storeCode,
+            quantity: quantity
+          }])
+
+        if (insertError) {
+          console.error('Erro ao inserir quantidade:', insertError)
+          return NextResponse.json(
+            { error: 'Erro ao inserir quantidade' },
+            { status: 500 }
+          )
+        }
       }
     } else {
-      if (existingQuantity) {
+      // Quantidade é 0, deletar registro se existir
+      if (existingQuantities) {
         const { error: deleteError } = await supabaseAdmin
           .from('colhetron_separation_quantities')
           .delete()
+          .eq('separation_id', separation.id)
           .eq('item_id', itemId)
           .eq('store_code', storeCode)
-        if (deleteError) { /* ... error handling ... */ }
+
+        if (deleteError) {
+          console.error('Erro ao deletar quantidade:', deleteError)
+          return NextResponse.json(
+            { error: 'Erro ao deletar quantidade' },
+            { status: 500 }
+          )
+        }
       }
     }
 
