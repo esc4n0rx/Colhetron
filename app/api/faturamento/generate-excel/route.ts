@@ -1,10 +1,8 @@
-// app/api/faturamento/generate-excel/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
 export async function GET(request: NextRequest) {
   return generateExcel(request)
@@ -84,7 +82,7 @@ async function generateExcel(request: NextRequest) {
     const materialCodes = [...new Set(separationData?.map(item => item.material_code) || [])]
     const { data: mediasData, error: mediasError } = await supabaseAdmin
       .from('colhetron_media_analysis')
-      .select('codigo, media_real')
+      .select('codigo, media_sistema')
       .in('codigo', materialCodes)
 
     if (mediasError) {
@@ -94,8 +92,8 @@ async function generateExcel(request: NextRequest) {
     // Criar mapa de material para média
     const materialToMedia = new Map<string, number>()
     mediasData?.forEach(media => {
-      if (media.media_real) {
-        materialToMedia.set(media.codigo, media.media_real)
+      if (media.media_sistema) {
+        materialToMedia.set(media.codigo, media.media_sistema)
       }
     })
 
