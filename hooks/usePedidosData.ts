@@ -142,7 +142,7 @@ export function usePedidosData() {
       const token = localStorage.getItem('colhetron_token')
       if (!token) throw new Error('Token não encontrado')
 
-      const response = await fetch('/api/separations/update-item-type', {
+      const response = await fetch('/api/separations/update-type', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -156,17 +156,28 @@ export function usePedidosData() {
         throw new Error(errorData.error || 'Erro ao atualizar tipo de separação')
       }
 
+      // Atualizar dados localmente
       setPedidos(prev => prev.map(pedido => 
         pedido.id === itemId 
-          ? { ...pedido, tipoSepar: typeSeparation } : pedido
+          ? { ...pedido, tipoSepar: typeSeparation }
+          : pedido
       ))
 
       return { success: true }
+
     } catch (error) {
       console.error('Erro ao atualizar tipo de separação:', error)
-      return { success: false, error: error instanceof Error ? error.message : 'Erro desconhecido' }
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Erro desconhecido' 
+      }
     }
   }
+
+  useEffect(() => {
+    fetchData()
+  }, [user])
+
 
   const uploadReforco = async (file: File): Promise<UploadReforcoResponse> => {
     try {

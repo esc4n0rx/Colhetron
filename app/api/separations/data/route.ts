@@ -40,21 +40,20 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar dados dos itens com quantidades por loja
-    // AJUSTE: Filtrar apenas itens que têm pelo menos uma quantidade > 0
+    // Buscar dados dos itens com quantidades por loja e tipo de separação
     const { data: items, error: itemsError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select(`
         id,
         material_code,
         description,
-        colhetron_separation_quantities!inner (
+        type_separation,
+        colhetron_separation_quantities (
           store_code,
           quantity
         )
       `)
       .eq('separation_id', separation.id)
-      .gt('colhetron_separation_quantities.quantity', 0)
       .order('material_code')
 
     if (itemsError) {
@@ -65,44 +64,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Filtrar itens que realmente têm quantidades > 0
-    const itemsWithQuantities = items?.filter(item => 
-      item.colhetron_separation_quantities && 
-      item.colhetron_separation_quantities.length > 0 &&
-      item.colhetron_separation_quantities.some((q: any) => q.quantity > 0)
-    ) || []
-
-    if (itemsWithQuantities.length === 0) {
-      return NextResponse.json({ 
-        data: [],
-        stores: []
-      })
-    }
-
-    // NOVO: Buscar dados dos materiais para obter o tipoSepar (diurno)
-    const materialCodes = itemsWithQuantities.map(item => item.material_code)
-    const { data: materialsData, error: materialsError } = await supabaseAdmin
-      .from('colhetron_materiais')
-      .select('material, diurno')
-      .in('material', materialCodes)
-
-    if (materialsError) {
-      console.error('Erro ao buscar dados dos materiais:', materialsError)
-      // Não retornar erro, apenas continuar sem o tipoSepar
-    }
-
-    // Criar mapa de material_code -> tipoSepar
-    const materialTypeMap = new Map<string, string>()
-    materialsData?.forEach(material => {
-      materialTypeMap.set(material.material, material.diurno || 'SECO')
-    })
-
-    // Buscar todas as lojas únicas que têm quantidade > 0
+    // Buscar todas as lojas únicas
     const { data: stores, error: storesError } = await supabaseAdmin
       .from('colhetron_separation_quantities')
       .select('store_code')
-      .eq('separation_id', separation.id)
-      .gt('quantity', 0)
+      .in('item_id', items.map(item => item.id))
 
     if (storesError) {
       console.error('Erro ao buscar lojas:', storesError)
@@ -112,42 +78,38 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Extrair lojas únicas
-    const uniqueStores = [...new Set(stores?.map(s => s.store_code) || [])].sort()
+    // Obter lojas únicas e ordenadas
+    const uniqueStores = [...new Set(stores.map(s => s.store_code))].sort()
 
-    // Formatar dados para o frontend
-    const formattedData = itemsWithQuantities.map(item => {
-      const quantities: { [key: string]: number } = {}
-      
-      // Inicializar todas as lojas com 0
-      uniqueStores.forEach(store => {
-        quantities[store] = 0
-      })
-      
-      // Preencher com as quantidades reais (apenas > 0)
-      item.colhetron_separation_quantities.forEach((qty: any) => {
-        if (qty.quantity > 0) {
-          quantities[qty.store_code] = qty.quantity
-        }
-      })
-
-      return {
+    // Transformar dados para o formato esperado pelo frontend
+    const formattedData = items.map(item => {
+      const baseItem = {
         id: item.id,
-        tipoSepar: materialTypeMap.get(item.material_code) || 'SECO', // AJUSTE: Buscar da tabela colhetron_materiais
-        calibre: "", // Campo vazio
+        tipoSepar: item.type_separation || '',
+        calibre: '', // Assumindo que não há calibre na base atual
         codigo: item.material_code,
-        descricao: item.description,
-        ...quantities
+        descricao: item.description
       }
+
+      // Adicionar quantidades por loja
+      const storeQuantities: { [key: string]: number } = {}
+      uniqueStores.forEach(store => {
+        const quantity = item.colhetron_separation_quantities?.find(
+          q => q.store_code === store
+        )?.quantity || 0
+        storeQuantities[store] = quantity
+      })
+
+      return { ...baseItem, ...storeQuantities }
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       data: formattedData,
-      stores: uniqueStores 
+      stores: uniqueStores
     })
 
   } catch (error) {
-    console.error('Erro ao buscar dados:', error)
+    console.error('Erro na API de separações:', error)
     return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }
