@@ -193,18 +193,15 @@ function EditableSelect({ value, onSave, disabled }: EditableSelectProps) {
   const [tempValue, setTempValue] = useState(value)
   const { categories } = useMaterialCategories()
 
-  const tiposPermitidos = [
-    "SECO", "FRIO", "ORGANICO", "OVO", "REFORÇO", "REDISTRIBUIÇÃO",
-    ...categories.map(cat => cat.value.toUpperCase())
-  ]
+  const tiposPermitidos = useMemo(() => {
+    const baseTypes = ["SECO", "FRIO", "ORGANICO", "OVO", "REFORÇO", "REDISTRIBUIÇÃO"];
+    const dynamicCategories = categories.map(cat => cat.value.trim().toUpperCase());
+    // Use a Set to combine and ensure uniqueness, then convert back to an array and sort.
+    return Array.from(new Set([...baseTypes, ...dynamicCategories])).sort();
+  }, [categories]);
 
   const handleSave = (newValue: string) => {
     onSave(newValue)
-    setIsEditing(false)
-  }
-
-  const handleCancel = () => {
-    setTempValue(value)
     setIsEditing(false)
   }
 
@@ -318,9 +315,9 @@ export default function PedidosTab() {
   }, [tableScale]);
 
   const availableTypes = useMemo(() => {
-    const types = new Set(pedidos.map(item => item.tipoSepar).filter(Boolean))
+    const types = new Set(pedidos.map(item => item.tipoSepar.trim().toUpperCase()).filter(Boolean))
     const sortedTypes = Array.from(types).sort((a, b) => {
-      const priority = ['SECO', 'FRIO', 'ORGANICO','OVO','REFORÇO','REDISTRIBUIÇÃO']
+      const priority = ['SECO', 'FRIO', 'ORGANICO', 'OVO', 'REFORÇO', 'REDISTRIBUIÇÃO']
       const aIndex = priority.indexOf(a)
       const bIndex = priority.indexOf(b)
       

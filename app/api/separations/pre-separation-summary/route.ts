@@ -87,7 +87,8 @@ export async function GET(request: NextRequest) {
 
     const summary = new Map<string, {
       tipoSepar: string
-      material: string
+      material_code: string // Manter o código para a chave
+      description: string // Armazenar a descrição
       zones: Map<string, number>
     }>()
 
@@ -98,14 +99,18 @@ export async function GET(request: NextRequest) {
     }) || []
 
     for (const item of validItems) {
-      const summaryItem = {
-        tipoSepar: item.type_separation || 'SECO',
-        material: item.material_code,
-        zones: new Map<string, number>()
+      // Usar o material_code como chave única
+      if (!summary.has(item.material_code)) {
+        summary.set(item.material_code, {
+          tipoSepar: item.type_separation || 'SECO',
+          material_code: item.material_code,
+          description: item.description, // Guardar a descrição aqui
+          zones: new Map<string, number>()
+        })
       }
 
-      summary.set(item.material_code, summaryItem)
-
+      const summaryItem = summary.get(item.material_code)!
+      
       // Processar apenas quantidades > 0
       const validQuantities = item.colhetron_separation_quantities.filter((qty: any) => qty.quantity > 0)
       
@@ -133,7 +138,7 @@ export async function GET(request: NextRequest) {
 
       return {
         tipoSepar: item.tipoSepar,
-        material: item.material,
+        material: item.description, // Usar a descrição no campo final
         ...zoneData,
         totalGeral,
       }
