@@ -17,6 +17,8 @@ export interface ReinforcementItem {
   id: string;
   material: string;
   tipoSepar: string;
+  codigo: string;
+  descricao: string;
   [key: string]: string | number;
 }
 
@@ -51,6 +53,8 @@ export function useReinforcementData() {
       
       const reinforcementData = await reinforcementResponse.json()
       
+      console.log('Dados recebidos:', reinforcementData)
+
       // 2. Buscar todas as lojas para ordenação
       const lojasResponse = await fetch('/api/cadastro/lojas', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -65,34 +69,55 @@ export function useReinforcementData() {
 
       // 3. Processar e formatar os dados do reforço
       const formattedItems: ReinforcementItem[] = []
-      const materialMap = new Map<string, ReinforcementItem>()
       
       const materials = reinforcementData.materials || []
       const quantities = reinforcementData.quantities || []
+      const stores = reinforcementData.stores || []
 
-      materials.forEach((mat: any, index: number) => {
+      console.log('Processando:', { materialsCount: materials.length, quantitiesCount: quantities.length, storesCount: stores.length })
+
+      // AJUSTE: Criar mapa de itens baseado no uniqueKey
+      const itemsMap = new Map<string, ReinforcementItem>()
+
+      // Primeiro, criar todos os itens baseados nos materiais
+      materials.forEach((material: any, materialIndex: number) => {
         const item: ReinforcementItem = {
-          id: mat.code,
-          material: mat.description,
-          tipoSepar: 'REFORÇO', // Categoria fixa para reforço
-          codigo: mat.code,
-          descricao: mat.description
+          id: material.uniqueKey || `${material.code}_${materialIndex}`,
+          material: `${material.code} - ${material.description}`,
+          tipoSepar: 'REFORÇO',
+          codigo: material.code,
+          descricao: material.description
         }
-        materialMap.set(index.toString(), item)
+
+        // Inicializar todas as lojas com 0
+        stores.forEach((store: string) => {
+          item[store] = 0
+        })
+
+        itemsMap.set(materialIndex.toString(), item)
       })
 
+      // Em seguida, aplicar as quantidades
       quantities.forEach((qty: any) => {
-        const item = materialMap.get(qty.materialIndex.toString())
-        if (item) {
+        const item = itemsMap.get(qty.materialIndex.toString())
+        if (item && qty.quantity > 0) {
           item[qty.storeCode] = qty.quantity
         }
       })
 
-      setItems(Array.from(materialMap.values()))
-      setLojas(reinforcementData.stores || [])
+      const finalItems = Array.from(itemsMap.values())
+      
+      console.log('Itens processados:', {
+        count: finalItems.length,
+        sample: finalItems[0] // Log do primeiro item para debug
+      })
+
+      setItems(finalItems)
+      setLojas(stores)
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Ocorreu um erro desconhecido'
+      console.error('Erro no fetchLastReinforcement:', err)
       setError(errorMessage)
       toast.error(errorMessage)
     } finally {

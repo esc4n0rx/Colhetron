@@ -10,6 +10,7 @@ interface ProcessedReforcoData {
     code: string
     description: string
     rowNumber: number
+    uniqueKey: string // NOVO: chave única combinando código + descrição
   }>
   stores: string[]
   quantities: Array<{
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
       quantities: filteredQuantities.map(q => ({
         ...q,
         materialIndex: materialsWithQuantity.findIndex(m => 
-          processedData.materials[q.materialIndex].code === m.code
+          processedData.materials[q.materialIndex].uniqueKey === m.uniqueKey // AJUSTE: usar uniqueKey
         )
       }))
     }
@@ -243,10 +244,14 @@ async function processReforcoFile(buffer: Uint8Array): Promise<ProcessedReforcoD
 
       if (materialCode && description) {
         const materialIndex = materials.length
+        // NOVO: Criar chave única combinando código e descrição
+        const uniqueKey = `${materialCode}|${description}`
+        
         materials.push({
           code: materialCode,
           description: description,
-          rowNumber: row + 1 
+          rowNumber: row + 1,
+          uniqueKey: uniqueKey // NOVO
         })
 
         for (let col = 2; col <= lastStoreCol; col++) {
@@ -314,6 +319,7 @@ async function processReforco(params: {
       materialTypeMap.set(m.material, m.diurno || 'SECO')
     })
 
+    // AJUSTE: Buscar itens existentes usando código E descrição
     const { data: existingSeparationItems, error: itemsError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select('id, material_code, description')
@@ -324,9 +330,11 @@ async function processReforco(params: {
       throw new Error(`Erro ao buscar itens existentes: ${itemsError.message}`)
     }
 
+    // AJUSTE: Criar mapa usando chave única (código + descrição)
     const existingItemsMap = new Map<string, { id: string; description: string }>()
     existingSeparationItems?.forEach(item => {
-      existingItemsMap.set(item.material_code, { id: item.id, description: item.description })
+      const uniqueKey = `${item.material_code}|${item.description}`
+      existingItemsMap.set(uniqueKey, { id: item.id, description: item.description })
     })
 
     let processedItems = 0
@@ -344,8 +352,9 @@ async function processReforco(params: {
 
       let itemId: string
 
-      if (existingItemsMap.has(material.code)) {
-        const existingItem = existingItemsMap.get(material.code)!
+      // AJUSTE: Verificar existência usando uniqueKey
+      if (existingItemsMap.has(material.uniqueKey)) {
+        const existingItem = existingItemsMap.get(material.uniqueKey)!
         itemId = existingItem.id
         updatedItems++
         updatedMaterialCodes.push(material.code)
@@ -448,7 +457,7 @@ async function processReforco(params: {
             .from('colhetron_separation_quantities')
             .insert([{
               item_id: itemId,
-              separation_id: separationId, // AJUSTE: Incluir separation_id
+              separation_id: separationId,
               store_code: storeCode,
               quantity: newQuantity
             }])

@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -37,10 +36,20 @@ export async function GET(request: NextRequest) {
     }
 
     if (!data || !data.data) {
-        return NextResponse.json({ error: 'Dados do reforço estão vazios ou corrompidos.' }, { status: 404 })
+      return NextResponse.json({ error: 'Dados do reforço estão vazios ou corrompidos.' }, { status: 404 })
     }
 
-    return NextResponse.json(data.data)
+    // AJUSTE: Garantir que retornamos os dados na estrutura correta
+    const reinforcementData = data.data
+    
+    // Log para debug
+    console.log('Dados encontrados do reforço:', {
+      materialsCount: reinforcementData.materials?.length || 0,
+      storesCount: reinforcementData.stores?.length || 0,
+      quantitiesCount: reinforcementData.quantities?.length || 0
+    })
+
+    return NextResponse.json(reinforcementData)
 
   } catch (error) {
     console.error('Erro na API de busca de reforço:', error)
