@@ -75,12 +75,9 @@ export default function PreSeparacaoTab() {
     if (filteredData.length === 0) return; // Se não tem nada pra imprimir, a gente nem se mexe.
 
     // ***** AJUSTE: LIMITADOR DE 18 ITENS POR PÁGINA *****
-    // Calculando quantas linhas cabem por página - otimizado para economizar folhas
-    const itemsPerPage = 18; // Ajustado para melhor aproveitamento das folhas
+    const itemsPerPage = 18;
     const totalPages = Math.ceil(filteredData.length / itemsPerPage);
 
-    // Montando um HTMLzão na mão pra ter controle total sobre o layout da impressão.
-    // É uma abordagem "old school", mas funciona muito bem pra relatórios simples.
     const printStyles = `
       <style>
         @media print {
@@ -111,7 +108,10 @@ export default function PreSeparacaoTab() {
             text-align: right; font-size: 9pt;
           }
           .page-info {
-            text-align: center; font-size: 8pt; margin: 0.5rem 0;
+            position: fixed;
+            top: 1cm;
+            right: 1cm;
+            font-size: 8pt;
           }
           .page-container {
             break-after: page;
@@ -135,113 +135,111 @@ export default function PreSeparacaoTab() {
             print-color-adjust: exact !important;
           }
           tbody tr:nth-child(even) {
-            background-color: #f9f9f9;
+            background-color: #f2f2f2 !important; /* zebra-striping para melhor leitura */
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           tfoot tr {
-            font-weight: bold; background-color: #e8e8e8;
+            font-weight: bold; 
+            background-color: #e8e8e8 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
           
-          /* Garantir que o cabeçalho se repita em cada página */
           thead {
             display: table-header-group;
+          }
+          tfoot {
+            display: table-footer-group;
           }
         }
       </style>
     `;
 
-    // Dividindo os dados em páginas com 18 itens cada
-    const pagesHtml = [];
+    let content = '<html><head>' + printStyles + '</head><body>';
+
     for (let page = 0; page < totalPages; page++) {
-      const startIndex = page * itemsPerPage;
-      const endIndex = Math.min(startIndex + itemsPerPage, filteredData.length);
-      const pageData = filteredData.slice(startIndex, endIndex);
-      const isLastPage = page === totalPages - 1;
-      const currentPageNum = page + 1;
+        const startIndex = page * itemsPerPage;
+        const endIndex = Math.min(startIndex + itemsPerPage, filteredData.length);
+        const pageData = filteredData.slice(startIndex, endIndex);
+        const isLastPage = page === totalPages - 1;
+        const currentPageNum = page + 1;
 
-      // Header da tabela com fundo preto e texto branco
-      const tableHeader = `
-        <thead>
-          <tr>
-            <th>TIPO SEPARAÇÃO</th>
-            <th>MATERIAL SEPARAÇÃO</th>
-            ${zones.map(zone => `<th class="text-center">${zone}</th>`).join('')}
-            ${isLastPage ? '<th class="text-center">Total Geral</th>' : ''}
-          </tr>
-        </thead>
-      `;
-
-      // Corpo da tabela para a página atual
-      const tableBody = `
-        <tbody>
-          ${pageData.map(item => `
+        // Cabeçalho da tabela com a coluna "Total Geral" sempre visível.
+        const tableHeader = `
+          <thead>
             <tr>
-              <td>${item.tipoSepar}</td>
-              <td>${item.material}</td>
-              ${zones.map(zone => `<td class="text-center">${(item[zone] as number) || 0}</td>`).join('')}
-              ${isLastPage ? `<td class="text-center">${item.totalGeral}</td>` : ''}
+              <th>TIPO SEPARAÇÃO</th>
+              <th>MATERIAL SEPARAÇÃO</th>
+              ${zones.map(zone => `<th class="text-center">${zone}</th>`).join('')}
+              <th class="text-center">Total Geral</th>
             </tr>
-          `).join('')}
-        </tbody>
-      `;
+          </thead>
+        `;
 
-      // Footer da tabela (apenas na última página)
-      const tableFooter = isLastPage ? `
-        <tfoot>
-          <tr>
-            <td colspan="2" class="text-right"><strong>Total Geral</strong></td>
-            ${zones.map(zone => `<td class="text-center"><strong>${totals[zone]}</strong></td>`).join('')}
-            <td class="text-center"><strong>${totals.totalGeral}</strong></td>
-          </tr>
-        </tfoot>
-      ` : '';
+        // Corpo da tabela renderizando o total de cada linha.
+        const tableBody = `
+          <tbody>
+            ${pageData.map(item => `
+              <tr>
+                <td>${item.tipoSepar}</td>
+                <td>${item.material}</td>
+                ${zones.map(zone => `<td class="text-center">${item[zone] || 0}</td>`).join('')}
+                <td class="text-center">${item.totalGeral || 0}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        `;
+        const calculatedGrandTotal = zones.reduce((sum, zone) => sum + (totals[zone] || 0), 0);
 
-      pagesHtml.push(`
-        <div class="page-container">
-          <div class="page-info">Página ${currentPageNum}/${totalPages}</div>
-          <table>
-            ${tableHeader}
-            ${tableBody}
-            ${tableFooter}
-          </table>
-        </div>
-      `);
+        const tableFooter = `
+          <tfoot>
+            <tr>
+              <td colspan="2" class="text-right"><strong>Total Geral</strong></td>
+              ${zones.map(zone => `<td class="text-center"><strong>${totals[zone] || 0}</strong></td>`).join('')}
+              <td class="text-center"><strong>${calculatedGrandTotal}</strong></td>
+            </tr>
+          </tfoot>
+        `;
+
+
+        
+        content += `
+            <div class="page-container">
+                <div class="print-header">
+                    <div class="header-info">
+                        <h1>Relatório de Separação</h1>
+                    </div>
+                    <div class="header-datetime">
+                        <p>Gerado em: ${new Date().toLocaleString('pt-BR')}</p>
+                        <p>Página ${currentPageNum} de ${totalPages}</p>
+                    </div>
+                </div>
+                <table>
+                    ${tableHeader}
+                    ${tableBody}
+                    ${isLastPage ? tableFooter : ''} 
+                </table>
+            </div>
+        `;
     }
 
-    const reportTitle = `PRÉ-SEPARAÇÃO ${filtroTipo !== 'Todos' ? `(${filtroTipo})` : ''}`;
-    const now = new Date();
-    const printContent = `
-      <html>
-        <head>
-          <title>${reportTitle}</title>
-          ${printStyles}
-        </head>
-        <body>
-          <div class="print-header">
-            <div class="header-info">
-              <h1>Sistema Colhetron</h1>
-              <p>${reportTitle}</p>
-            </div>
-            <div class="header-datetime">
-              ${now.toLocaleDateString('pt-BR')} <br/>
-              ${now.toLocaleTimeString('pt-BR')}
-            </div>
-          </div>
-          ${pagesHtml.join('')}
-        </body>
-      </html>
-    `;
-
-    // Abrimos uma nova janela, injetamos nosso HTML e mandamos imprimir.
+    content += '</body></html>';
+    
     const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+    if(printWindow) {
+        printWindow.document.write(content);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 500);
     }
-  }, [filteredData, zones, totals, filtroTipo]);
+// AQUI ESTÁ A CORREÇÃO PRINCIPAL: Usando o array de dependências que você informou.
+}, [filteredData, zones, totals, filtroTipo]);
 
   // --- RENDERIZAÇÃO CONDICIONAL ---
   // Enquanto os dados não chegam, mostramos um spinner. Essencial pra UX.

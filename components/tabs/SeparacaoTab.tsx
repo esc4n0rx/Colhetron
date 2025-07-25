@@ -108,7 +108,6 @@ export default function SeparacaoTab() {
   const handlePrint = useCallback(() => {
     if (visibleData.length === 0 || visibleStores.length === 0) return;
 
-    // ✅ AJUSTE: CSS otimizado para impressão
     const printStyles = `
       <style>
         @media print {
@@ -202,7 +201,7 @@ export default function SeparacaoTab() {
       return `<div class="page-container"><table>${tableHeader}${tableBody}</table></div>`;
     }).join('');
 
-    const printContent = `<html><head><title>${reportTitle}</title>${printStyles}</head><body><div class="print-header"><div class="header-info"><h1>Sistema Colhetron</h1><p>${reportTitle}</p></div><div class="header-datetime">${now.toLocaleDateString('pt-BR')} <br/>${now.toLocaleTimeString('pt-BR')}</div></div><div class="filter-info"><strong>Filtros Aplicados:</strong> Tipo: ${filtroTipo} | Zona: ${filtroZona} | Subzona: ${filtroSubzona}</div>${pagesHtml}</body></html>`;
+    const printContent = `<html><head><title>${reportTitle}</title>${printStyles}</head><body><div class="print-header"><div class="header-info"><h1>Sistema Colhetron ${filtroTipo}  ${filtroZona}</h1><p>${reportTitle}</p></div><div class="header-datetime">${now.toLocaleDateString('pt-BR')} <br/>${now.toLocaleTimeString('pt-BR')}</div></div><div class="filter-info"><strong>Filtros Aplicados:</strong> Tipo: ${filtroTipo} | Zona: ${filtroZona} | Subzona: ${filtroSubzona}</div>${pagesHtml}</body></html>`;
 
     const printWindow = window.open('', '_blank');
     if (printWindow) {
