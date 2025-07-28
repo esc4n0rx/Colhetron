@@ -16,7 +16,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
+
     // Buscar separação ativa
+    const { data: separation, error: sepError } = await supabaseAdmin
+      .from('colhetron_separations')
+      .select('id')
+      .eq('user_id', decoded.userId)
+      .eq('status', 'active')
+      .single()
+
+    if (sepError || !separation) {
+      return NextResponse.json(
+        { error: 'Nenhuma separação ativa encontrada' },
+        { status: 404 }
+      )
+    }
+
     const { data: activeSeparation } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -24,11 +39,11 @@ export async function GET(request: NextRequest) {
       .eq('status', 'active')
       .single()
 
-    // Buscar dados de pedidos gerados
     const { data: pedidosItems, error } = await supabaseAdmin
       .from('colhetron_pedidos_gerados')
       .select('*')
       .eq('user_id', decoded.userId)
+      .eq('separation_id', separation.id)
       .order('created_at', { ascending: false })
 
     if (error) {

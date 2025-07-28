@@ -39,7 +39,7 @@ export const usePedidosGeradosData = (): UsePedidosGeradosDataReturn => {
       })
 
       if (!response.ok) {
-        throw new Error('Erro ao carregar dados')
+        throw new Error('Erro ao carregar dados, Nenhuma separação ativa encontrada')
       }
 
       const result = await response.json()
