@@ -61,7 +61,7 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
     
     // Skip header line if exists
     const startIndex = lines[0]?.toLowerCase().includes('código') || 
-                     lines[0]?.toLowerCase().includes('material') ? 1 : 0
+                       lines[0]?.toLowerCase().includes('material') ? 1 : 0
     
     for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i].trim()
@@ -101,11 +101,8 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
     const clipboardData = e.clipboardData.getData('text')
     setPastedData(clipboardData)
     
-    console.log('Dados colados:', clipboardData) // Debug
-    
     try {
       const parsed = parseClipboardData(clipboardData)
-      console.log('Itens processados:', parsed) // Debug
       
       if (parsed.length === 0) {
         setError('Nenhum dado válido encontrado. Verifique o formato dos dados.')
@@ -116,7 +113,6 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
       setError("")
       setStep("preview")
     } catch (err) {
-      console.error('Erro ao processar dados:', err)
       setError('Erro ao processar dados. Verifique o formato.')
     }
   }
@@ -190,10 +186,13 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="w-full max-w-5xl max-h-[90vh] overflow-hidden"
+            // AJUSTE: Largura reduzida, overflow-hidden para manter os cantos arredondados na animação
+            className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-lg"
           >
-            <Card className="bg-gray-900 border-gray-700">
-              <CardHeader className="flex flex-row items-center justify-between">
+            {/* AJUSTE: Card agora usa flexbox para controlar o layout do header e content */}
+            <Card className="bg-gray-900 border-gray-700 w-full h-full flex flex-col">
+              {/* AJUSTE: Header com flex-shrink-0 para não encolher */}
+              <CardHeader className="flex flex-row items-center justify-between flex-shrink-0">
                 <CardTitle className="text-xl font-bold apple-font text-white flex items-center">
                   <Copy className="w-5 h-5 mr-2" />
                   {step === "paste" ? "Colar Dados do Excel" : "Confirmar Dados"}
@@ -209,7 +208,8 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
                 </Button>
               </CardHeader>
               
-              <CardContent>
+              {/* AJUSTE: CardContent agora é rolável */}
+              <CardContent className="overflow-y-auto">
                 {step === "paste" && (
                   <div className="space-y-6">
                     <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
@@ -219,20 +219,8 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
                       </h3>
                       <ul className="text-blue-300 text-sm space-y-1">
                         <li>1. Copie os dados do Excel (Ctrl+C)</li>
-                        <li>2. Cole aqui usando Ctrl+V ou clique na área abaixo</li>
-                        <li>3. Formato: CÓDIGO | MATERIAL | Quantidade KG | Quantidade Caixas</li>
-                        <li>4. Aceita números com vírgula (ex: 1.020,000 ou 10,000000)</li>
-                        <li>5. Os zeros à esquerda do código serão removidos automaticamente</li>
-                      </ul>
-                    </div>
 
-                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-                      <h4 className="text-yellow-400 font-semibold mb-2">Exemplo de formato aceito:</h4>
-                      <pre className="text-yellow-300 text-sm font-mono bg-gray-800 p-2 rounded">
-{`000000000000139912	ABACAXI UND	60,000	10,000000
-000000000000100007	ABOBORA JAPONESA KG	1.020,000	34,000000
-000000000000100008	ABOBORA MADURA KG	1.020,000	34,000000`}
-                      </pre>
+                      </ul>
                     </div>
 
                     <div className="space-y-4">
@@ -248,19 +236,9 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
                         <p className="text-gray-400 mb-2">
                           <strong>Ctrl+V</strong> para colar dados do Excel
                         </p>
-                        <p className="text-gray-500 text-sm">
-                          ou cole manualmente na área de texto abaixo
-                        </p>
                       </div>
 
-                      <textarea
-                        ref={textareaRef}
-                        value={pastedData}
-                        onChange={(e) => setPastedData(e.target.value)}
-                        placeholder="Ou cole os dados aqui manualmente..."
-                        className="w-full h-32 p-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 resize-none font-mono text-sm"
-                        disabled={isLoading}
-                      />
+              
 
                       {error && (
                         <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center">
