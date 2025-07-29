@@ -1,7 +1,6 @@
-// app/api/pos-faturamento/route.ts
-import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyToken } from '@/lib/auth';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +15,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
     }
 
-    // Buscar separação ativa
     const { data: separation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
@@ -31,83 +29,83 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar dados de pós faturamento
-    const { data: posItems, error } = await supabaseAdmin
+    const { data: posItems, error: posError } = await supabaseAdmin
       .from('colhetron_pos_faturamento')
       .select('*')
       .eq('user_id', decoded.userId)
       .eq('separation_id', separation.id)
       .order('created_at', { ascending: false })
 
-    if (error) {
-      console.error('Erro ao buscar dados de pós faturamento:', error)
-      return NextResponse.json({ error: 'Erro ao buscar dados' }, { status: 500 })
-    }
-
-    // Se não há dados de pós faturamento, retornar vazio
+    if (posError) throw new Error('Erro ao buscar dados de pós-faturamento.');
+    
     if (!posItems || posItems.length === 0) {
       return NextResponse.json({ 
         data: [], 
-        message: separation 
-          ? 'Nenhum item de pós faturamento. Use "Colar Dados" para fazer upload.'
-          : 'Nenhuma separação ativa encontrada. Crie uma separação primeiro.',
-        separationInfo: separation ? {
-          id: separation.id,
-          isActive: true,
-          status: 'active'
-        } : null
+        separationInfo: { id: separation.id, isActive: true, status: 'active' }
       })
     }
 
-    // Buscar dados de média para comparação
+    const materialCodes = posItems.map(item => item.codigo);
+
+    // 3. Buscar dados de média (Estoque Antes) E FILTRAR ITENS COM ESTOQUE ZERO
     const { data: mediaItems } = await supabaseAdmin
       .from('colhetron_media_analysis')
-      .select('codigo, material, quantidade_caixas')
+      .select('codigo, quantidade_caixas, estoque_atual') // Selecionar estoque_atual para o filtro
       .eq('user_id', decoded.userId)
-
-    // Criar mapa de dados de média
-    const mediaMap = new Map()
+      .gt('estoque_atual', 0) // <-- AJUSTE PRINCIPAL AQUI
+      .in('codigo', materialCodes)
+    
+    const mediaMap = new Map<string, number>()
     mediaItems?.forEach(item => {
-      mediaMap.set(item.codigo, {
-        material: item.material,
-        quantidade_caixas_antes: item.quantidade_caixas
-      })
+      mediaMap.set(item.codigo, item.quantidade_caixas)
     })
 
-    const comparacaoData = posItems.map(item => {
-      const mediaData = mediaMap.get(item.codigo)
-      const quantidadeCaixasAntes = mediaData?.quantidade_caixas_antes || 0
-      const diferenca =  quantidadeCaixasAntes-item.estoque_atual 
-      
-      let status = 'novo'
-      if (mediaData) {
-        if (item.estoque_atual === 0) {
-          status = 'zerado'
-        } else if (diferenca === 0) {
-          status = 'faturado'
-        } else if (diferenca < 0) {
-          status = 'faturado'
-        } else {
-          status = 'parcial'
-        }
-      }
+    const { data: separationQuantities } = await supabaseAdmin
+      .from('colhetron_separation_items')
+      .select('material_code, description, colhetron_separation_quantities(quantity)')
+      .eq('separation_id', separation.id)
+      .in('material_code', materialCodes)
 
-      return {
-        codigo: item.codigo,
-        material: item.material,
-        quantidade_kg: item.quantidade_kg,
-        quantidade_caixas_antes: quantidadeCaixasAntes,
-        quantidade_caixas_atual: item.quantidade_caixas,
-        estoque_atual: item.estoque_atual,
-        diferenca: diferenca,
-        status: status
+    const totalSeparadoMap = new Map<string, { description: string, total: number }>()
+    separationQuantities?.forEach(item => {
+      const total = item.colhetron_separation_quantities.reduce((sum: number, q: any) => sum + q.quantity, 0)
+      if (total > 0) {
+        totalSeparadoMap.set(item.material_code, { description: item.description, total })
       }
+    })
+
+    //await generateDebugLogs(separation.id, totalSeparadoMap, mediaItems, posItems);
+
+    const comparacaoData = posItems
+      .filter(item => mediaMap.has(item.codigo)) // Filtra posItems para incluir apenas os que têm estoque > 0 na mídia
+      .map(item => {
+        const quantidadeCaixasAntes = mediaMap.get(item.codigo) || 0;
+        const diferenca = quantidadeCaixasAntes - item.estoque_atual;
+        
+        let status: 'OK' | 'Divergente' | 'novo';
+
+        if (item.estoque_atual === quantidadeCaixasAntes && quantidadeCaixasAntes > 0) {
+          status = 'Divergente';
+        } else {
+          status = 'OK';
+        }
+
+        return {
+          codigo: item.codigo,
+          material: item.material,
+          quantidade_kg: item.quantidade_kg,
+          quantidade_caixas_antes: quantidadeCaixasAntes,
+          quantidade_caixas_atual: item.quantidade_caixas,
+          estoque_atual: item.estoque_atual,
+          diferenca: diferenca,
+          status: status
+        }
     })
 
     const separationInfo = {
-      id: separation?.id || null,
-      isActive: !!separation,
-      status: separation ? 'active' : 'completed'
+      id: separation.id,
+      isActive: true,
+      status: 'active' as const
     }
 
     return NextResponse.json({

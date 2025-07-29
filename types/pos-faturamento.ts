@@ -9,7 +9,7 @@ export interface PosFaturamentoItem {
     quantidade_caixas: number
     estoque_atual: number
     diferenca: number
-    status: 'faturado' | 'parcial' | 'zerado' | 'novo'
+    status: 'OK' | 'Divergente' | 'novo'
     created_at: string
     updated_at: string
   }
@@ -22,7 +22,7 @@ export interface PosFaturamentoItem {
     quantidade_caixas_atual: number
     estoque_atual: number
     diferenca: number
-    status: 'faturado' | 'parcial' | 'zerado' | 'novo'
+    status: 'OK' | 'Divergente' | 'novo'
   }
   
   export interface PosFaturamentoFormData {

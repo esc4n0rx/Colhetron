@@ -19,7 +19,8 @@ import {
   CheckCircle,
   TrendingUp,
   TrendingDown,
-  Minus
+  Minus,
+  XCircle
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { usePosFaturamentoData } from '@/hooks/usePosFaturamentoData'
@@ -88,27 +89,20 @@ export default function PosFaturamentoTab() {
     return result
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: PosFaturamentoComparacao['status']) => {
     switch (status) {
-      case 'faturado':
+      case 'OK':
         return (
           <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
             <CheckCircle className="w-3 h-3 mr-1" />
-            Faturado
+            OK
           </Badge>
         )
-      case 'parcial':
+      case 'Divergente':
         return (
-          <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
-            <AlertTriangle className="w-3 h-3 mr-1" />
-            Parcial
-          </Badge>
-        )
-      case 'zerado':
-        return (
-          <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
-            <Minus className="w-3 h-3 mr-1" />
-            Zerado
+          <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+            <XCircle className="w-3 h-3 mr-1" />
+            Divergente
           </Badge>
         )
       case 'novo':
@@ -274,9 +268,9 @@ export default function PosFaturamentoTab() {
                   <th className="p-4 text-gray-300 font-medium">Código</th>
                   <th className="p-4 text-gray-300 font-medium">Material</th>
                   <th className="p-4 text-gray-300 font-medium text-right">Qtd KG</th>
-                  <th className="p-4 text-gray-300 font-medium text-right">Qtd Caixas</th>
+                  <th className="p-4 text-gray-300 font-medium text-right">Qtd Caixas (Antes)</th>
                   <th className="p-4 text-gray-300 font-medium text-right">Estoque Atual</th>
-                  <th className="p-4 text-gray-300 font-medium text-right">Diferença</th>
+                  <th className="p-4 text-gray-300 font-medium text-right">Faturado (Qtd)</th>
                   <th className="p-4 text-gray-300 font-medium text-center">Status</th>
                 </tr>
               </thead>
@@ -336,7 +330,7 @@ export default function PosFaturamentoTab() {
                           <div className="flex items-center justify-end space-x-2">
                             {getDiferencaIcon(item.diferenca)}
                             <span className={`font-medium ${getDiferencaColor(item.diferenca)}`}>
-                              {item.diferenca > 0 ? '+' : ''}{item.diferenca}
+                              {item.diferenca}
                             </span>
                           </div>
                         </td>
