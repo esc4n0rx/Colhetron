@@ -17,18 +17,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar separação ativa
-    const { data: activeSeparation } = await supabaseAdmin
+    const { data: separation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
       .eq('user_id', decoded.userId)
       .eq('status', 'active')
       .single()
 
+    if (sepError || !separation) {
+      return NextResponse.json(
+        { error: 'Nenhuma separação ativa encontrada' },
+        { status: 404 }
+      )
+    }
+
     // Buscar dados de pós faturamento
     const { data: posItems, error } = await supabaseAdmin
       .from('colhetron_pos_faturamento')
       .select('*')
       .eq('user_id', decoded.userId)
+      .eq('separation_id', separation.id)
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -40,11 +48,11 @@ export async function GET(request: NextRequest) {
     if (!posItems || posItems.length === 0) {
       return NextResponse.json({ 
         data: [], 
-        message: activeSeparation 
+        message: separation 
           ? 'Nenhum item de pós faturamento. Use "Colar Dados" para fazer upload.'
           : 'Nenhuma separação ativa encontrada. Crie uma separação primeiro.',
-        separationInfo: activeSeparation ? {
-          id: activeSeparation.id,
+        separationInfo: separation ? {
+          id: separation.id,
           isActive: true,
           status: 'active'
         } : null
@@ -66,11 +74,10 @@ export async function GET(request: NextRequest) {
       })
     })
 
-    // Processar dados de comparação
     const comparacaoData = posItems.map(item => {
       const mediaData = mediaMap.get(item.codigo)
       const quantidadeCaixasAntes = mediaData?.quantidade_caixas_antes || 0
-      const diferenca = item.estoque_atual - quantidadeCaixasAntes
+      const diferenca =  quantidadeCaixasAntes-item.estoque_atual 
       
       let status = 'novo'
       if (mediaData) {
@@ -98,9 +105,9 @@ export async function GET(request: NextRequest) {
     })
 
     const separationInfo = {
-      id: activeSeparation?.id || null,
-      isActive: !!activeSeparation,
-      status: activeSeparation ? 'active' : 'completed'
+      id: separation?.id || null,
+      isActive: !!separation,
+      status: separation ? 'active' : 'completed'
     }
 
     return NextResponse.json({
@@ -134,21 +141,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar separação ativa
-    const { data: activeSeparation } = await supabaseAdmin
+    const { data: separation, error: sepError } = await supabaseAdmin
       .from('colhetron_separations')
       .select('id')
       .eq('user_id', decoded.userId)
       .eq('status', 'active')
       .single()
 
-    if (!activeSeparation) {
-      return NextResponse.json({ error: 'Nenhuma separação ativa encontrada' }, { status: 404 })
+    if (sepError || !separation) {
+      return NextResponse.json(
+        { error: 'Nenhuma separação ativa encontrada' },
+        { status: 404 }
+      )
     }
 
     // Preparar dados para inserção
     const posItems = items.map(item => ({
       user_id: decoded.userId,
-      separation_id: activeSeparation.id,
+      separation_id: separation.id,
       codigo: item.codigo,
       material: item.material,
       quantidade_kg: item.quantidade_kg,

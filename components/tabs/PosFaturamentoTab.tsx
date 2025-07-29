@@ -69,7 +69,6 @@ export default function PosFaturamentoTab() {
   }
 
   const handlePasteData = async (items: any[]) => {
-    // Converter dados colados para formato de pós faturamento
     const posFaturamentoItems = items.map(item => ({
       codigo: item.codigo,
       material: item.material,
