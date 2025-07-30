@@ -1,4 +1,3 @@
-// app/api/separations/pre-separation-summary/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -28,7 +27,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Nenhuma separação ativa encontrada' }, { status: 404 })
     }
 
-    // AJUSTE: Buscar dados dos itens filtrando apenas quantidades > 0 usando separation_id
+    // Buscar dados dos itens com suas quantidades, filtrando por separation_id
     const { data: items, error: itemsError } = await supabaseAdmin
       .from('colhetron_separation_items')
       .select(`
@@ -42,34 +41,35 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('separation_id', activeSeparation.id)
-      .gt('colhetron_separation_quantities.quantity', 0) // AJUSTE: Filtrar apenas quantidades > 0
+      .gt('colhetron_separation_quantities.quantity', 0)
 
     if (itemsError) {
       console.error('Erro ao buscar itens:', itemsError)
-      return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
+      return NextResponse.json({ error: 'Erro interno do servidor ao buscar itens' }, { status: 500 })
     }
 
-    // Buscar dados das lojas usando separation_id
+    // Buscar códigos de loja únicos que têm itens com quantidade > 0
     const { data: storesWithQuantities, error: storesError } = await supabaseAdmin
       .from('colhetron_separation_quantities')
       .select('store_code')
       .eq('separation_id', activeSeparation.id)
-      .gt('quantity', 0) // AJUSTE: Filtrar apenas quantidades > 0
+      .gt('quantity', 0)
 
     if (storesError) {
-      console.error('Erro ao buscar lojas:', storesError)
-      return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
+      console.error('Erro ao buscar lojas com quantidades:', storesError)
+      return NextResponse.json({ error: 'Erro interno do servidor ao buscar lojas' }, { status: 500 })
     }
 
     const uniqueStoreCodes = [...new Set(storesWithQuantities?.map(s => s.store_code) || [])]
 
     if (uniqueStoreCodes.length === 0) {
-      return NextResponse.json({ 
-        data: [], 
-        zones: [] 
+      return NextResponse.json({
+        data: [],
+        zones: []
       })
     }
 
+    // Buscar informações de zona para as lojas relevantes
     const { data: lojas, error: lojasError } = await supabaseAdmin
       .from('colhetron_lojas')
       .select('prefixo, zonaSeco, zonaFrio')
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     if (lojasError) {
       console.error('Erro ao buscar dados das lojas:', lojasError)
-      return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
+      return NextResponse.json({ error: 'Erro interno do servidor ao buscar dados das lojas' }, { status: 500 })
     }
 
     const lojasMap = new Map<string, { zonaSeco: string; zonaFrio: string }>()
@@ -87,39 +87,37 @@ export async function GET(request: NextRequest) {
 
     const summary = new Map<string, {
       tipoSepar: string
-      material_code: string // Manter o código para a chave
-      description: string // Armazenar a descrição
+      material_code: string
+      description: string
       zones: Map<string, number>
     }>()
+    
+    // Processar itens
+    for (const item of items || []) {
+      // **AJUSTE PRINCIPAL: Criar uma chave única combinando código do material e tipo de separação**
+      const uniqueKey = `${item.material_code}|${item.type_separation}`;
 
-    // Processar apenas itens com quantidades > 0
-    const validItems = items?.filter(item => {
-      const quantities = item.colhetron_separation_quantities || []
-      return quantities.some((qty: any) => qty.quantity > 0)
-    }) || []
-
-    for (const item of validItems) {
-      // Usar o material_code como chave única
-      if (!summary.has(item.material_code)) {
-        summary.set(item.material_code, {
+      if (!summary.has(uniqueKey)) {
+        summary.set(uniqueKey, {
           tipoSepar: item.type_separation || 'SECO',
           material_code: item.material_code,
-          description: item.description, // Guardar a descrição aqui
+          description: item.description,
           zones: new Map<string, number>()
         })
       }
 
-      const summaryItem = summary.get(item.material_code)!
+      const summaryItem = summary.get(uniqueKey)!
+
+      const quantities = (item.colhetron_separation_quantities || []) as { store_code: string; quantity: number }[];
       
-      // Processar apenas quantidades > 0
-      const validQuantities = item.colhetron_separation_quantities.filter((qty: any) => qty.quantity > 0)
-      
-      for (const qty of validQuantities) {
-        const lojaInfo = lojasMap.get(qty.store_code)
-        if (lojaInfo) {
-          const zone = item.type_separation === 'FRIO' ? lojaInfo.zonaFrio : lojaInfo.zonaSeco
-          if (zone) {
-            summaryItem.zones.set(zone, (summaryItem.zones.get(zone) || 0) + qty.quantity)
+      for (const qty of quantities) {
+        if (qty.quantity > 0) {
+          const lojaInfo = lojasMap.get(qty.store_code)
+          if (lojaInfo) {
+            const zone = item.type_separation === 'FRIO' ? lojaInfo.zonaFrio : lojaInfo.zonaSeco
+            if (zone) {
+              summaryItem.zones.set(zone, (summaryItem.zones.get(zone) || 0) + qty.quantity)
+            }
           }
         }
       }
@@ -129,7 +127,7 @@ export async function GET(request: NextRequest) {
     const formattedData = Array.from(summary.values()).map(item => {
       let totalGeral = 0
       const zoneData: { [key: string]: number } = {}
-      
+
       item.zones.forEach((quantity, zone) => {
         allZones.add(zone)
         totalGeral += quantity
@@ -138,30 +136,31 @@ export async function GET(request: NextRequest) {
 
       return {
         tipoSepar: item.tipoSepar,
-        material: item.description, // Usar a descrição no campo final
+        material: item.description, // Usar a descrição para exibição
         ...zoneData,
         totalGeral,
       }
     })
-    
-    // Filtrar apenas itens que têm quantidade total > 0
+
+    // Filtrar itens que, após o processamento, não têm quantidade
     const dataWithQuantity = formattedData.filter(item => item.totalGeral > 0)
     
+    // Garantir que todas as zonas existentes sejam colunas em todas as linhas
     const sortedZones = Array.from(allZones).sort()
-    
-    const finalData = dataWithQuantity.map(row => {
-        const completeRow = { ...row }
-        sortedZones.forEach(zone => {
-            if (!(zone in completeRow)) {
-                (completeRow as any)[zone] = 0
-            }
-        })
-        return completeRow
-    }).sort((a, b) => a.material.localeCompare(b.material))
 
-    return NextResponse.json({ 
-      data: finalData, 
-      zones: sortedZones 
+    const finalData = dataWithQuantity.map(row => {
+      const completeRow: { [key: string]: any } = { ...row }
+      sortedZones.forEach(zone => {
+        if (!(zone in completeRow)) {
+          completeRow[zone] = 0
+        }
+      })
+      return completeRow
+    }).sort((a, b) => a.material.localeCompare(b.material)) // Ordenar por descrição do material
+
+    return NextResponse.json({
+      data: finalData,
+      zones: sortedZones
     })
 
   } catch (error) {
