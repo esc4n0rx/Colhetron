@@ -82,7 +82,7 @@ export function usePedidosData() {
       setLojas(stores)
       setActiveSeparationId(separationId)
 
-      const activitiesResponse = await fetch('/api/activities', {
+      const activitiesResponse = await fetch('/api/user-activities', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

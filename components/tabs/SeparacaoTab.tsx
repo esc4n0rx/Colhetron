@@ -164,7 +164,7 @@ export default function SeparacaoTab() {
     const pagesHtml = storeChunks.map((storeChunk, index) => {
       const isLastPage = index === storeChunks.length - 1;
       
-      const highlightStyle = 'background-color:rgb(32, 32, 32); color:rgb(250, 247, 247); font-weight: bold;';
+      const highlightStyle = 'background-color: #e0e0e0; color: #000; font-weight: bold;';
       const totalCellStyle = 'font-weight: bold; text-align: center;';
 
       const tableHeader = `

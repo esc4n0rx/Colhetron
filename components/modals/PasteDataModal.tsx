@@ -7,7 +7,23 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { X, Copy, AlertCircle, CheckCircle, FileSpreadsheet, Upload, Loader2 } from "lucide-react"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { 
+  X, 
+  Copy, 
+  AlertCircle, 
+  CheckCircle, 
+  FileSpreadsheet, 
+  Upload, 
+  Loader2, 
+  ArrowLeft, 
+  Eye,
+  Clipboard,
+  Calculator
+} from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface PasteDataModalProps {
   isOpen: boolean
@@ -172,204 +188,274 @@ export default function PasteDataModal({ isOpen, onClose, onSuccess, onAddItems 
     setError("")
   }
 
+  if (!isOpen) return null
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            // AJUSTE: Largura reduzida, overflow-hidden para manter os cantos arredondados na animação
-            className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-lg"
-          >
-            {/* AJUSTE: Card agora usa flexbox para controlar o layout do header e content */}
-            <Card className="bg-gray-900 border-gray-700 w-full h-full flex flex-col">
-              {/* AJUSTE: Header com flex-shrink-0 para não encolher */}
-              <CardHeader className="flex flex-row items-center justify-between flex-shrink-0">
-                <CardTitle className="text-xl font-bold apple-font text-white flex items-center">
-                  <Copy className="w-5 h-5 mr-2" />
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-5xl w-[95vw] h-[85vh] p-0 gap-0 bg-background border-border flex flex-col">
+        {/* Header Compacto - FIXO */}
+        <DialogHeader className="px-6 py-4 border-b border-border bg-card/50 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-500/10 rounded-lg">
+                {step === "paste" ? (
+                  <Clipboard className="h-5 w-5 text-blue-400" />
+                ) : (
+                  <Eye className="h-5 w-5 text-green-400" />
+                )}
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-semibold">
                   {step === "paste" ? "Colar Dados do Excel" : "Confirmar Dados"}
-                </CardTitle>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleClose} 
-                  className="text-gray-400 hover:text-white"
+                </DialogTitle>
+                <DialogDescription className="text-sm text-muted-foreground">
+                  {step === "paste" 
+                    ? "Cole os dados copiados do Excel para importar"
+                    : `${parsedItems.length} itens processados e prontos para importar`
+                  }
+                </DialogDescription>
+              </div>
+            </div>
+            
+            {/* BOTÕES SEMPRE VISÍVEIS NO TOPO */}
+            <div className="flex items-center gap-2">
+              {step === "preview" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBack}
                   disabled={isLoading}
+                  className="text-muted-foreground hover:text-foreground"
                 >
-                  <X className="w-5 h-5" />
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Voltar
                 </Button>
-              </CardHeader>
-              
-              {/* AJUSTE: CardContent agora é rolável */}
-              <CardContent className="overflow-y-auto">
-                {step === "paste" && (
-                  <div className="space-y-6">
-                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-                      <h3 className="text-blue-400 font-semibold mb-2 flex items-center">
-                        <FileSpreadsheet className="w-4 h-4 mr-2" />
-                        Como usar:
-                      </h3>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClose}
+                disabled={isLoading}
+              >
+                Cancelar
+              </Button>
+              {step === "preview" && (
+                <Button
+                  onClick={handleConfirm}
+                  disabled={isLoading}
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-1" />
+                      Confirmar
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogHeader>
+
+        {/* Conteúdo Principal - ÁREA ROLÁVEL */}
+        <div className="flex-1 overflow-hidden">
+          {step === "paste" && (
+            <ScrollArea className="h-full">
+              <div className="p-6 space-y-6">
+                {/* Instruções */}
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <FileSpreadsheet className="h-5 w-5 text-blue-400 mt-0.5 shrink-0" />
+                    <div>
+                      <h3 className="text-blue-400 font-semibold mb-2">Como usar:</h3>
                       <ul className="text-blue-300 text-sm space-y-1">
                         <li>1. Copie os dados do Excel (Ctrl+C)</li>
-
+                        <li>2. Cole diretamente na área destacada ou no campo de texto</li>
+                        <li>3. O sistema processará automaticamente as colunas: Código, Material, Qtd KG, Qtd Caixas</li>
+                        <li>4. Revise os dados processados antes de confirmar</li>
                       </ul>
                     </div>
+                  </div>
+                </div>
 
-                    <div className="space-y-4">
-                      <label className="text-gray-300 font-medium">
-                        Cole seus dados aqui:
-                      </label>
-                      
+                {/* Área de Colagem */}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Método 1: Paste Direto */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-foreground">Método Rápido:</h4>
                       <div
                         onPaste={handlePaste}
-                        className="relative border-2 border-dashed border-gray-600 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer"
+                        className="relative border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-blue-500/50 transition-colors cursor-pointer bg-card/30"
                       >
-                        <Copy className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                        <p className="text-gray-400 mb-2">
-                          <strong>Ctrl+V</strong> para colar dados do Excel
+                        <Copy className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-muted-foreground mb-2">
+                          <strong>Ctrl+V</strong> aqui para colar diretamente
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Os dados serão processados automaticamente
                         </p>
                       </div>
+                    </div>
 
-              
-
-                      {error && (
-                        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center">
-                          <AlertCircle className="w-5 h-5 text-red-400 mr-2 flex-shrink-0" />
-                          <span className="text-red-300 text-sm">{error}</span>
-                        </div>
-                      )}
-
-                      <div className="flex justify-end space-x-3">
-                        <Button 
-                          variant="outline" 
-                          onClick={handleClose}
-                          disabled={isLoading}
-                          className="border-gray-600 text-gray-300 hover:bg-gray-800"
-                        >
-                          Cancelar
-                        </Button>
-                        <Button 
+                    {/* Método 2: Manual */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-foreground">Método Manual:</h4>
+                      <div className="space-y-3">
+                        <Textarea
+                          ref={textareaRef}
+                          placeholder="Cole seus dados aqui e clique em 'Processar Dados'"
+                          value={pastedData}
+                          onChange={(e) => setPastedData(e.target.value)}
+                          className="min-h-32 resize-none bg-card border-border text-foreground placeholder:text-muted-foreground"
+                        />
+                        <Button
                           onClick={handleManualPaste}
                           disabled={!pastedData.trim() || isLoading}
-                          className="bg-blue-600 hover:bg-blue-700"
+                          variant="outline"
+                          className="w-full"
                         >
-                          {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                          <Calculator className="h-4 w-4 mr-2" />
                           Processar Dados
                         </Button>
                       </div>
                     </div>
                   </div>
-                )}
 
-                {step === "preview" && (
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
-                          {parsedItems.length} itens encontrados
-                        </Badge>
-                        <span className="text-gray-400 text-sm">
-                          Os cálculos serão feitos automaticamente
-                        </span>
+                  {/* Formato Esperado */}
+                  
+
+                  {/* Erro */}
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-destructive/10 border border-destructive/30 rounded-lg p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+                        <div>
+                          <h4 className="text-destructive font-medium">Erro ao processar dados</h4>
+                          <p className="text-destructive/80 text-sm mt-1">{error}</p>
+                        </div>
                       </div>
-                    </div>
+                    </motion.div>
+                  )}
+                </div>
+              </div>
+            </ScrollArea>
+          )}
 
-                    <div className="max-h-96 overflow-y-auto border border-gray-700 rounded-lg">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="border-gray-700 bg-gray-800">
-                            <TableHead className="text-gray-300 text-xs">CÓDIGO</TableHead>
-                            <TableHead className="text-gray-300 text-xs">MATERIAL</TableHead>
-                            <TableHead className="text-gray-300 text-xs text-center">Quantidade KG</TableHead>
-                            <TableHead className="text-gray-300 text-xs text-center">Quantidade Caixas</TableHead>
-                            <TableHead className="text-gray-300 text-xs text-center">Média Sistema</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {parsedItems.map((item, index) => {
-                            const mediaSistema = item.quantidadeCaixas > 0 ? 
-                              (item.quantidadeKg / item.quantidadeCaixas) : 0
-
-                            return (
-                              <TableRow key={index} className="border-gray-700">
-                                <TableCell className="text-white text-xs font-mono">
-                                  {item.codigo}
-                                </TableCell>
-                                <TableCell className="text-white text-xs">
-                                  {item.material}
-                                </TableCell>
-                                <TableCell className="text-center text-xs">
-                                  <span className="text-blue-400 font-medium">
-                                    {item.quantidadeKg.toFixed(3)}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="text-center text-xs">
-                                  <span className="text-green-400 font-medium">
-                                    {item.quantidadeCaixas.toFixed(6)}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="text-center text-xs">
-                                  <span className="text-yellow-400 font-medium">
-                                    {mediaSistema.toFixed(8)}
-                                  </span>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    {error && (
-                      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center">
-                        <AlertCircle className="w-5 h-5 text-red-400 mr-2 flex-shrink-0" />
-                        <span className="text-red-300 text-sm">{error}</span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between">
-                      <Button 
-                        variant="outline" 
-                        onClick={handleBack}
-                        disabled={isLoading}
-                        className="border-gray-600 text-gray-300 hover:bg-gray-800"
-                      >
-                        Voltar
-                      </Button>
-                      <div className="flex space-x-3">
-                        <Button 
-                          variant="outline" 
-                          onClick={handleClose}
-                          disabled={isLoading}
-                          className="border-gray-600 text-gray-300 hover:bg-gray-800"
-                        >
-                          Cancelar
-                        </Button>
-                        <Button 
-                          onClick={handleConfirm}
-                          disabled={isLoading}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                          Confirmar e Adicionar
-                        </Button>
-                      </div>
-                    </div>
+          {step === "preview" && (
+            <div className="h-full flex flex-col">
+              {/* Info da Preview */}
+              <div className="px-6 py-3 border-b border-border bg-card/30 flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Badge variant="secondary" className="bg-green-500/20 text-green-400 border-green-500/30">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      {parsedItems.length} itens processados
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Os cálculos serão feitos automaticamente pelo sistema
+                    </span>
                   </div>
+                </div>
+              </div>
+
+              {/* Tabela de Preview - ALTURA FIXA COM SCROLL */}
+              <div className="flex-1 p-6 overflow-hidden">
+                <div className="h-full border border-border rounded-lg overflow-hidden bg-card">
+                  <ScrollArea className="h-full">
+                    <Table>
+                      <TableHeader className="sticky top-0 bg-muted z-10">
+                        <tr className="border-b border-border">
+                          <TableHead className="text-xs font-medium text-muted-foreground w-24">
+                            CÓDIGO
+                          </TableHead>
+                          <TableHead className="text-xs font-medium text-muted-foreground">
+                            MATERIAL
+                          </TableHead>
+                          <TableHead className="text-xs font-medium text-muted-foreground text-center w-24">
+                            QTD KG
+                          </TableHead>
+                          <TableHead className="text-xs font-medium text-muted-foreground text-center w-24">
+                            QTD CAIXAS
+                          </TableHead>
+                          <TableHead className="text-xs font-medium text-muted-foreground text-center w-24">
+                            MÉDIA CALC.
+                          </TableHead>
+                        </tr>
+                      </TableHeader>
+                      <TableBody>
+                        {parsedItems.map((item, index) => {
+                          const mediaSistema = item.quantidadeCaixas > 0 
+                            ? (item.quantidadeKg / item.quantidadeCaixas).toFixed(2)
+                            : '0.00'
+
+                          return (
+                            <motion.tr
+                              key={`${item.codigo}-${index}`}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: index * 0.01 }}
+                              className="border-b border-border hover:bg-muted/50"
+                            >
+                              <TableCell className="font-mono text-xs text-blue-400">
+                                {item.codigo}
+                              </TableCell>
+                              <TableCell className="text-xs text-foreground">
+                                <div className="max-w-xs truncate" title={item.material}>
+                                  {item.material}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs text-center font-mono">
+                                {item.quantidadeKg.toLocaleString('pt-BR', { 
+                                  minimumFractionDigits: 2, 
+                                  maximumFractionDigits: 2 
+                                })}
+                              </TableCell>
+                              <TableCell className="text-xs text-center font-mono">
+                                {item.quantidadeCaixas}
+                              </TableCell>
+                              <TableCell className="text-xs text-center font-mono text-muted-foreground">
+                                {mediaSistema}
+                              </TableCell>
+                            </motion.tr>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </div>
+
+                {/* Erro na preview */}
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-4 bg-destructive/10 border border-destructive/30 rounded-lg p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+                      <div>
+                        <h4 className="text-destructive font-medium">Erro ao confirmar dados</h4>
+                        <p className="text-destructive/80 text-sm mt-1">{error}</p>
+                      </div>
+                    </div>
+                  </motion.div>
                 )}
-              </CardContent>
-            </Card>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

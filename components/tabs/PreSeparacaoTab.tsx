@@ -15,7 +15,7 @@ export default function PreSeparacaoTab() {
   // Nosso hook customizado que abstrai toda a lógica de buscar e preparar os dados. Show de bola!
   const { data, zones, isLoading, error } = usePreSeparacaoData();
   // Estado simples pra guardar qual filtro de tipo está ativo.
-  const [filtroTipo, setFiltroTipo] = useState<"Todos" | "SECO" | "FRIO" | "ORGANICO" | "OVO">("Todos");
+  const [filtroTipo, setFiltroTipo] = useState<string[]>([]);
 
   // useMemo para calcular os tipos disponíveis apenas uma vez ou quando os dados mudam.
   // Evita ficar recalculando isso a cada renderização.
@@ -36,9 +36,9 @@ export default function PreSeparacaoTab() {
   // Ele é responsável por filtrar e ordenar os dados que vão para a tabela.
   const filteredData = useMemo(() => {
     // Passo 1: Aplicar o filtro de tipo (SECO, FRIO, etc.)
-    const typeFiltered = filtroTipo === "Todos"
-      ? data // Se for 'Todos', a gente pega a lista completa.
-      : data.filter((item) => item.tipoSepar === filtroTipo);
+    const typeFiltered = filtroTipo.length === 0
+    ? data
+    : data.filter((item) => filtroTipo.includes(item.tipoSepar));
 
     // ***** AJUSTE 1: FILTRAR ITENS ZERADOS *****
     // Passo 2: Agora, removemos da lista qualquer item cujo total geral seja 0.
@@ -128,8 +128,8 @@ export default function PreSeparacaoTab() {
             text-align: left;
           }
           th {
-            background-color: #000 !important; /* Fundo preto */
-            color: #fff !important; /* Texto branco */
+            background-color: #e0e0e0 !important; /* Fundo cinza claro */
+            color: #000 !important; /* Texto preto para manter contraste */
             font-weight: bold;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
@@ -280,20 +280,26 @@ export default function PreSeparacaoTab() {
                     <Button
                         key={type}
                         size="sm"
-                        variant={filtroTipo === type ? "secondary" : "ghost"}
-                        onClick={() => setFiltroTipo(type as any)}
+                        variant={filtroTipo.includes(type) ? "secondary" : "ghost"}
+                        onClick={() => {
+                          setFiltroTipo(prev => 
+                            prev.includes(type) 
+                              ? prev.filter(t => t !== type)
+                              : [...prev, type]
+                          )
+                        }}
                         className="text-xs px-3 py-1"
                     >
                         {type}
                     </Button>
                 ))}
                 <Button
-                    size="sm"
-                    variant={filtroTipo === "Todos" ? "secondary" : "ghost"}
-                    onClick={() => setFiltroTipo("Todos")}
-                    className="text-xs px-3 py-1"
+                  size="sm"
+                  variant={filtroTipo.length === 0 ? "secondary" : "ghost"}
+                  onClick={() => setFiltroTipo([])}
+                  className="text-xs px-3 py-1"
                 >
-                    Todos
+                  Todos
                 </Button>
             </div>
             <Button 
